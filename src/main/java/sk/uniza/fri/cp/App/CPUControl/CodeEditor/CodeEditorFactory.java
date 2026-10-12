@@ -43,7 +43,7 @@ public class CodeEditorFactory {
     private static final String KEYWORDS_MOVE_PATTERN = "\\b(" + String.join("|", KEYWORDS_MOVE) + ")\\b";
     private static final String KEYWORDS_BRANCH_PATTERN = "\\b(" + String.join("|", KEYWORDS_BRANCH) + ")\\b";
     private static final String KEYWORDS_SPECIAL_PATTERN = "\\b(" + String.join("|", KEYWORDS_SPECIAL) + ")\\b";
-    private static final String LABEL_PATTERN = "[a-zA-Z0-9]+:";
+    private static final String LABEL_PATTERN = "[a-zA-Z_][a-zA-Z0-9_]*:";
     private static final String COMMENT_PATTERN = "(?:(?<!');|(?<=');(?!')).*";
 
     private static final Pattern PATTERN = Pattern.compile(

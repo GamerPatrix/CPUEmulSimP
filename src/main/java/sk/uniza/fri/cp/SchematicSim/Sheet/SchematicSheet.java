@@ -711,8 +711,28 @@ public class SchematicSheet extends ScrollPane {
         // nie starý obsah z predchádzajúceho kopírovania
         clipboardGates = new ArrayList<>();
         clipboardWires = new ArrayList<>();
-        // bez označených súčiastok nemajú vodiče ku kopírovaným pinnom čo pripojiť
-        if (gates.isEmpty()) return;
+
+        // bez označených súčiastok sa kopírujú len vodiče s voľnými koncami
+        if (gates.isEmpty()) {
+            List<Wire> copyWires = collectCopyableWires(selectedWires);
+            if (copyWires.isEmpty()) return;
+
+            int minX = Integer.MAX_VALUE;
+            int minY = Integer.MAX_VALUE;
+            for (Wire wire : copyWires) {
+                for (WireEnd end : wire.getEnds()) {
+                    minX = Math.min(minX, (int) Math.floor(end.getLayoutX() / gridSystem.getSizeX()));
+                    minY = Math.min(minY, (int) Math.floor(end.getLayoutY() / gridSystem.getSizeY()));
+                }
+            }
+            clipboardBaseX = minX;
+            clipboardBaseY = minY;
+            for (Wire wire : copyWires) {
+                clipboardWires.add(new CopiedWire(wire.getColor(),
+                        new CopiedEnd[]{copyEnd(wire.getEnds()[0]), copyEnd(wire.getEnds()[1])}));
+            }
+            return;
+        }
 
         int minX = Integer.MAX_VALUE;
         int minY = Integer.MAX_VALUE;
@@ -754,18 +774,15 @@ public class SchematicSheet extends ScrollPane {
     }
 
     /**
-     * Či možno vodič kopírovať: nemá voľný (nedokončený) koniec a všetky jeho piny sú
-     * na práve kopírovaných súčiastkach. Spájače na koncoch vodiča nevadia - tie sa
-     * obnovia spoločne so spolu-susednými vodičmi na rovnakom bode.
+     * Či možno vodič kopírovať: kdekoľvek je koniec pripojený na pin, musí patriť práve
+     * kopírovaným súčiastkam. Voľné (nedokončené) konce a konce na spájačoch neprekážajú -
+     * spájače sa obnovia spoločne so spolu-susednými vodičmi na rovnakom bode, voľné konce
+     * si nesú vlastnú pozíciu.
      */
     private boolean isWireCopyable(Wire wire, Set<GateSymbol> copiedGates) {
         for (WireEnd end : wire.getEnds()) {
             Pin pin = end.getPin();
-            if (pin != null) {
-                if (!copiedGates.contains(pin.getOwner())) return false;
-            } else if (end.getJunction() == null) {
-                return false;
-            }
+            if (pin != null && !copiedGates.contains(pin.getOwner())) return false;
         }
         return true;
     }

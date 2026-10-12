@@ -5,9 +5,15 @@ import javafx.application.Platform;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import sk.uniza.fri.cp.App.CPUControl.CodeEditor.CodeEditorFactory;
 import sk.uniza.fri.cp.CPUEmul.Exceptions.InvalidCodeLinesException;
 
+import java.lang.reflect.Field;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -130,5 +136,34 @@ public class ParserJumpLabelTest {
         assertEquals("A", p.getInstruction(0).getFirstParameter());
         Program p2 = new Parser("loop: ; komentar pri navesti\nMVI A, 5\nJMP loop\n", 3).call();
         assertEquals("0", p2.getInstruction(1).getFirstParameter());
+    }
+
+    @Test
+    public void labelStartingWithUnderscoreIsResolved() throws Exception {
+        Program p = new Parser("_loop:\nMVI A, 5\nJMP _loop\nRET\n", 4).call();
+        assertEquals("0", p.getInstruction(1).getFirstParameter());
+    }
+
+    @Test
+    public void underscoreLabelWithDigitsIsResolved() throws Exception {
+        Program p = new Parser("_1:\nRET\nJMP _1\n", 3).call();
+        assertEquals("0", p.getInstruction(1).getFirstParameter());
+    }
+
+    @Test
+    public void labelContainingUnderscoreIsResolved() throws Exception {
+        Program p = new Parser("my_label:\nRET\nJMP my_label\n", 3).call();
+        assertEquals("0", p.getInstruction(1).getFirstParameter());
+    }
+
+    @Test
+    public void codeEditorHighlighterAcceptsUnderscoreLabels() throws Exception {
+        Field patternField = CodeEditorFactory.class.getDeclaredField("PATTERN");
+        patternField.setAccessible(true);
+        Pattern pattern = (Pattern) patternField.get(null);
+        Matcher matcher = pattern.matcher("_start:\nMOV A, B\nJMP _start\n");
+        assertTrue(matcher.find());
+        assertEquals("_start:", matcher.group());
+        assertNotNull(matcher.group("LABEL"));
     }
 }

@@ -43,6 +43,9 @@ public class SchemeLoader {
     private static final String VERSION = "2.0";
     private static final String FORGIVEN_ID_PREFIX = "s"; // id pouzite pri nacitani ak chyba ulozene id
 
+    /** Tolerancia zhodnosti bodov - vodiče sa spájajú len na presne rovnakom bode. */
+    private static final double POINT_EPS = 0.5;
+
     private SchemeLoader() {
     }
 
@@ -203,7 +206,7 @@ public class SchemeLoader {
                     WireEntry entry = loadWire(sheet, wireElement, gatesById, loadedWires, hubByKey);
                     if (entry == null) continue;
 
-                    if (entry.wire.areBothEndsConnected()) {
+                    if (loadable(entry)) {
                         loadedWires.add(entry.wire);
                     } else {
                         pendingResolve.add(entry);
@@ -217,7 +220,7 @@ public class SchemeLoader {
                     resolveJunctionEnd(entry.wire.getEnds()[0], entry.startElement, loadedWires, hubByKey);
                     resolveJunctionEnd(entry.wire.getEnds()[1], entry.endElement, loadedWires, hubByKey);
 
-                    if (entry.wire.areBothEndsConnected()) {
+                    if (loadable(entry)) {
                         loadedWires.add(entry.wire);
                     } else {
                         stillPending.add(entry);
@@ -225,6 +228,11 @@ public class SchemeLoader {
                 }
                 for (WireEntry entry : stillPending) {
                     entry.wire.delete();
+                }
+
+                // vodiče so slobodnými koncami (a staršie súbory) potrebujú prepočítať geometriu
+                for (Wire wire : loadedWires) {
+                    wire.settleToGrid();
                 }
             }
         } catch (JDOMException | IOException | InvocationTargetException | InstantiationException
@@ -276,7 +284,46 @@ public class SchemeLoader {
         resolveJunctionEnd(ends[0], startElement, loadedWires, hubByKey);
         resolveJunctionEnd(ends[1], endElement, loadedWires, hubByKey);
 
+        // voľné konce sa obnovia na uloženú pozíciu - vodič so slobodným koncom nezmizne
+        positionFreeEnd(ends[0], startElement);
+        positionFreeEnd(ends[1], endElement);
+
         return new WireEntry(wire, startElement, endElement);
+    }
+
+    /**
+     * Či sa načítaný vodič zachová. Spojené konce sa vždy zachovajú; nepripojené konce
+     * sa zachovajú len pokiaľ majú v súbore uloženú pozíciu voľného konca (priame
+     * súradnice), inak by zo vodiča zostala neúplná silueta.
+     */
+    private static boolean loadable(WireEntry entry) {
+        if (entry.wire.areBothEndsConnected()) return true;
+        WireEnd[] ends = entry.wire.getEnds();
+        Element[] elements = new Element[]{entry.startElement, entry.endElement};
+        for (int i = 0; i < 2; i++) {
+            if (ends[i].isConnected()) continue;
+            if (elements[i] == null || elements[i].getChild("x") == null
+                    || elements[i].getChild("y") == null) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Umiestnenie voľného konca na uloženú pozíciu (koniec bez pinu aj spájača, uložený
+     * ako priame súradnice {@code <x>/<y>}). Vodič so slobodným koncom sa tak po načítaní
+     * zachová a nezahodí.
+     */
+    private static void positionFreeEnd(WireEnd end, Element endElement) {
+        if (endElement == null || end.isConnected()) return;
+        String x = endElement.getChildText("x");
+        String y = endElement.getChildText("y");
+        if (x == null || y == null) return;
+        try {
+            end.moveTo(Double.parseDouble(x), Double.parseDouble(y));
+        } catch (NumberFormatException ignored) {
+        }
     }
 
     private static Map<String, String> readProperties(Element gateElement) {
@@ -369,11 +416,13 @@ public class SchemeLoader {
             }
         }
 
-        // kmeňový vodič len prechádza bodom - rozdelí sa na dva vodiče
-        double grid = end.getSheet().getGrid().getSizeMin();
+        // kmeňový vodič len prechádza bodom - rozdelí sa na dva vodiče. Tento prípad
+        // vzniká len v starých súboroch (kmeň cez bod prechádzal ako zlom). Bod sa smie
+        // spojiť LEN keď leží PRESNE na vodiči - ak vodič vedie len v blízkosti bodu,
+        // spojenie by skratovalo dve rôzne siete.
         for (Wire loadedWire : loadedWires) {
             if (loadedWire == end.getWire()) continue;
-            if (loadedWire.distanceToPoint(pos) <= grid / 2.0) {
+            if (liesOnWire(loadedWire, pos)) {
                 WireJunction junction = loadedWire.splitAtPoint(pos);
                 if (junction != null) {
                     hubByKey.put(key, junction);
@@ -388,6 +437,27 @@ public class SchemeLoader {
         hubByKey.put(key, standalone);
         end.connect(standalone);
         return true;
+    }
+
+    /**
+     * Leží bod {@code position} presne na osi vodiča {@code wire} (s toleranciou
+     * {@link #POINT_EPS})? Vodiče sú vždy priame vodorovné alebo zvislé úsečky.
+     */
+    private static boolean liesOnWire(Wire wire, Point2D position) {
+        Point2D p0 = wire.getEnds()[0].getConnectionPoint();
+        Point2D p1 = wire.getEnds()[1].getConnectionPoint();
+        boolean horizontal = Math.abs(p0.getY() - p1.getY()) <= POINT_EPS;
+        boolean vertical = Math.abs(p0.getX() - p1.getX()) <= POINT_EPS;
+        if (!horizontal && !vertical) return false;
+
+        double axis = horizontal ? p0.getY() : p0.getX();
+        double coord = horizontal ? position.getY() : position.getX();
+        if (Math.abs(coord - axis) > POINT_EPS) return false;
+
+        double along = horizontal ? position.getX() : position.getY();
+        double a = horizontal ? p0.getX() : p0.getY();
+        double b = horizontal ? p1.getX() : p1.getY();
+        return along >= Math.min(a, b) - POINT_EPS && along <= Math.max(a, b) + POINT_EPS;
     }
 
     /**
