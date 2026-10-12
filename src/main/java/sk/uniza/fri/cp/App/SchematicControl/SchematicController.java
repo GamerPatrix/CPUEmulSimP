@@ -417,6 +417,7 @@ public class SchematicController {
             ((Stage) this.root.getScene().getWindow()).setTitle(WINDOW_TITLE + " - " + file.getName());
             currentFile = file;
             sheet.clearChange();
+            sheet.resetUndoHistory();
         }
     }
 
@@ -434,6 +435,7 @@ public class SchematicController {
         ((Stage) this.root.getScene().getWindow()).setTitle(WINDOW_TITLE);
         currentFile = null;
         sheet.clearChange();
+        sheet.resetUndoHistory();
     }
 
     /**

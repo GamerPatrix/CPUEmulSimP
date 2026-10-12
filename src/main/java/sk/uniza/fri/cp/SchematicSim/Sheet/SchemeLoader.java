@@ -19,6 +19,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.io.StringReader;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -57,6 +58,36 @@ public class SchemeLoader {
      * @return true ak sa uloženie podarilo.
      */
     public static boolean save(File file, SchematicSheet sheet) {
+        XMLOutputter xmlOutputter = new XMLOutputter();
+        xmlOutputter.setFormat(Format.getPrettyFormat());
+
+        try (BufferedWriter bw = new BufferedWriter(
+                new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8))) {
+            xmlOutputter.output(createDocument(sheet), bw);
+            return true;
+        } catch (IOException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Serializácia aktuálneho stavu schémy do XML reťazca - snímka pre undo/redo.
+     *
+     * @param sheet Plocha schémy.
+     * @return XML reťazec so stavom plochy.
+     */
+    public static String saveToString(SchematicSheet sheet) {
+        XMLOutputter xmlOutputter = new XMLOutputter();
+        xmlOutputter.setFormat(Format.getPrettyFormat());
+        return xmlOutputter.outputString(createDocument(sheet));
+    }
+
+    /**
+     * Zostavenie XML dokumentu so stavom schémy (súčiastky + vodiče). Spoločný základ
+     * pre uloženie do súboru {@link #save} aj pre snímku stavu {@link #saveToString}.
+     */
+    private static Document createDocument(SchematicSheet sheet) {
         Document jdomDoc = new Document();
         Element rootElement = new Element("Scheme");
         rootElement.setAttribute("ver", VERSION);
@@ -107,17 +138,7 @@ public class SchemeLoader {
         }
         rootElement.addContent(wiresElement);
 
-        XMLOutputter xmlOutputter = new XMLOutputter();
-        xmlOutputter.setFormat(Format.getPrettyFormat());
-
-        try (BufferedWriter bw = new BufferedWriter(
-                new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8))) {
-            xmlOutputter.output(jdomDoc, bw);
-            return true;
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
-        }
+        return jdomDoc;
     }
 
     private static void appendWireEnd(Element wireElement, String name, WireEnd end) {
@@ -165,7 +186,37 @@ public class SchemeLoader {
     public static boolean load(File file, SchematicSheet sheet) {
         SAXBuilder builder = new SAXBuilder();
         try {
-            Document jdomDoc = builder.build(file);
+            return loadDocument(builder.build(file), sheet);
+        } catch (JDOMException | IOException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Načítanie stavu schémy z XML reťazca - snímka pre undo/redo. Rovnaká rekonštrukcia
+     * plochy ako {@link #load(File, SchematicSheet)} - pred načítaním sa obsah plochy vymaže.
+     *
+     * @param xml   Reťazec so stavom schémy vo formáte .schx.
+     * @param sheet Plocha, na ktorú sa stav načíta.
+     * @return true ak sa stav načítal.
+     */
+    public static boolean loadFromString(String xml, SchematicSheet sheet) {
+        SAXBuilder builder = new SAXBuilder();
+        try {
+            return loadDocument(builder.build(new StringReader(xml)), sheet);
+        } catch (JDOMException | IOException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Rekonštrukcia plochy z XML dokumentu (spoločný základ pre {@link #load} aj
+     * {@link #loadFromString}). Pred načítaním vymaže obsah plochy.
+     */
+    private static boolean loadDocument(Document jdomDoc, SchematicSheet sheet) {
+        try {
             Element rootElement = jdomDoc.getRootElement();
             if (!"Scheme".equalsIgnoreCase(rootElement.getName())) return false;
 
@@ -235,7 +286,7 @@ public class SchemeLoader {
                     wire.settleToGrid();
                 }
             }
-        } catch (JDOMException | IOException | InvocationTargetException | InstantiationException
+        } catch (InvocationTargetException | InstantiationException
                 | IllegalAccessException | ClassNotFoundException | NoSuchMethodException
                 | NullPointerException e) {
             e.printStackTrace();

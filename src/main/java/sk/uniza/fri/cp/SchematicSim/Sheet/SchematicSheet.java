@@ -1,5 +1,8 @@
 package sk.uniza.fri.cp.SchematicSim.Sheet;
 
+import javafx.animation.Animation;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ReadOnlyBooleanProperty;
@@ -14,6 +17,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextInputControl;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
@@ -24,10 +28,12 @@ import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
+import javafx.util.Duration;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
 import sk.uniza.fri.cp.SchematicSim.GridOccupancy;
 import sk.uniza.fri.cp.SchematicSim.GridSystem;
 import sk.uniza.fri.cp.SchematicSim.Item;
+import sk.uniza.fri.cp.SchematicSim.Movable;
 import sk.uniza.fri.cp.SchematicSim.Selectable;
 import sk.uniza.fri.cp.SchematicSim.Wire.Joint;
 import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
@@ -36,6 +42,7 @@ import sk.uniza.fri.cp.SchematicSim.Wire.WireJunction;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -87,6 +94,13 @@ public class SchematicSheet extends ScrollPane {
     private double lastMouseSceneY = -1;
 
     private boolean hasChanged = false;
+
+    /** História undo/redo - snímky stavu plochy (XML, pozri {@link SchemeLoader#saveToString}). */
+    private static final int MAX_UNDO_STEPS = 100;
+    private final ArrayDeque<String> undoStack = new ArrayDeque<>();
+    private final ArrayDeque<String> redoStack = new ArrayDeque<>();
+    private String lastUndoSnapshot;
+    private boolean isUndoRestoring = false;
 
     /** Povolenie editácie schémy (pridávanie/mazanie/presun vodičov a súčiastok). */
     private final SimpleBooleanProperty editingEnabled = new SimpleBooleanProperty(true);
@@ -321,19 +335,37 @@ public class SchematicSheet extends ScrollPane {
         });
 
         // Ctrl+C kopíruje a Ctrl+V vkladá vybraté súčiastky (okno schémy nemá textové polia,
-        // takže skratky nijako nekolidujú s úpravou textu)
+        // takže skratky nijako nekolidujú s úpravou textu). Ctrl+Z/CTRL+Y = undo/redo; ak má
+        // fokus textový editor (kód), skratky sa ignorujú a nechajú sa jeho vlastnému spracovaniu.
         this.sceneProperty().addListener((obs, oldScene, newScene) -> {
             if (newScene != null) {
                 newScene.getAccelerators().put(
                         new KeyCodeCombination(KeyCode.C, KeyCombination.CONTROL_DOWN), this::copySelection);
                 newScene.getAccelerators().put(
                         new KeyCodeCombination(KeyCode.V, KeyCombination.CONTROL_DOWN), this::pasteClipboard);
+                newScene.getAccelerators().put(
+                        new KeyCodeCombination(KeyCode.Z, KeyCombination.CONTROL_DOWN),
+                        () -> { if (!isFocusInTextEditor()) undo(); });
+                newScene.getAccelerators().put(
+                        new KeyCodeCombination(KeyCode.Y, KeyCombination.CONTROL_DOWN),
+                        () -> { if (!isFocusInTextEditor()) redo(); });
+                newScene.getAccelerators().put(
+                        new KeyCodeCombination(KeyCode.Z, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN),
+                        () -> { if (!isFocusInTextEditor()) redo(); });
             }
         });
 
         this.debugWires.addListener((obs, oldValue, newValue) -> {
             for (Wire wire : layersManager.getWires()) wire.setDebugColored(newValue);
         });
+
+        // východisková snímka histórie = prázdna plocha; po každej zmene sa snímka zachytí
+        // (okamžite v riadiacich handlermi, inak do 500 ms cyklicky cez hliadku)
+        lastUndoSnapshot = serializeState();
+
+        Timeline undoWatcher = new Timeline(new KeyFrame(Duration.millis(500), e -> ensureUndoSynced()));
+        undoWatcher.setCycleCount(Animation.INDEFINITE);
+        undoWatcher.play();
     }
 
     /**
@@ -349,6 +381,9 @@ public class SchematicSheet extends ScrollPane {
         this.sceneProperty().addListener((obs, oldScene, newScene) -> {
             if (newScene == null) return;
             newScene.addEventFilter(MouseEvent.MOUSE_RELEASED, event -> {
+                // po dokončení ťahu (vodič, presun súčiastky) sa prípadná zmena zachytí do
+                // histórie undo - odložene, až po spracovaní udalosti cieľovými handlermi
+                Platform.runLater(this::ensureUndoSynced);
                 Wire inProgress = Pin.getInProgressWire();
                 WireEnd grabbed = WireEnd.getGrabbedEnd();
                 if (inProgress == null && grabbed == null) return;
@@ -598,6 +633,127 @@ public class SchematicSheet extends ScrollPane {
         this.hasChanged = false;
     }
 
+    // ===== UNDO / REDO (CTRL+Z / CTRL+Y, CTRL+SHIFT+Z) =====
+
+    /**
+     * Vrátenie poslednej zmeny v schéme (CTRL+Z). Vracia true ak sa zmena vrátila.
+     * História je založená na snímkach stavu plochy ({@link SchemeLoader#saveToString}),
+     * preto sa obnoví aj rozloženie vodičov, spájačov pinov a vlastností súčiastok.
+     */
+    public boolean undo() {
+        if (!isEditingEnabled()) return false;
+        cancelInFlightEdit();
+        ensureUndoSynced();
+        if (undoStack.isEmpty()) return false;
+        redoStack.addFirst(lastUndoSnapshot);
+        trim(redoStack);
+        lastUndoSnapshot = undoStack.removeFirst();
+        restoreState(lastUndoSnapshot);
+        return true;
+    }
+
+    /**
+     * Znovupoužitie vrátenej zmeny (CTRL+Y alebo CTRL+SHIFT+Z). Vracia true ak sa obnovila.
+     */
+    public boolean redo() {
+        if (!isEditingEnabled()) return false;
+        cancelInFlightEdit();
+        ensureUndoSynced();
+        if (redoStack.isEmpty()) return false;
+        undoStack.addFirst(lastUndoSnapshot);
+        trim(undoStack);
+        lastUndoSnapshot = redoStack.removeFirst();
+        restoreState(lastUndoSnapshot);
+        return true;
+    }
+
+    /**
+     * Zachytenie poslednej zmeny do histórie: posledná známa snímka stavu sa presunie do
+     * undo zásobníka, len čo sa stav plochy od nej odchýli. Volá sa okamžite v riadiacich
+     * handlermi (pustenie myši, mazanie, vkladanie) a cyklicky každých 500 ms, takže sa
+     * zachytí aj zmena z kontextovej ponuky (dĺžka zbernice, prehodenie D-Q, ...).
+     * Nová zmena po undo/redo vymaže redo históriu.
+     */
+    private void ensureUndoSynced() {
+        if (isUndoRestoring || isEditingActive()) return;
+        String current = serializeState();
+        if (current.equals(lastUndoSnapshot)) return;
+        undoStack.addFirst(lastUndoSnapshot);
+        trim(undoStack);
+        redoStack.clear();
+        lastUndoSnapshot = current;
+    }
+
+    private void trim(ArrayDeque<String> stack) {
+        while (stack.size() > MAX_UNDO_STEPS) stack.removeLast();
+    }
+
+    /**
+     * Snímka aktuálneho stavu plochy ako XML reťazec.
+     */
+    private String serializeState() {
+        return SchemeLoader.saveToString(this);
+    }
+
+    /**
+     * Zrušenie rozpracovaného ťahu (kreslenie vodiča / uchopený koniec) pred undo/redo,
+     * aby obnova stavu neprebehla uprostred operácie.
+     */
+    private void cancelInFlightEdit() {
+        if (Pin.getInProgressWire() != null) Pin.finishInProgressWire();
+        if (WireEnd.getGrabbedEnd() != null) WireEnd.finishGrab();
+    }
+
+    /**
+     * Prebieha editácia ťahom (vodič/uchopený koniec/súčiastka/označenie obdĺžnikom).
+     * Počas nej sa história nezaznamenáva - snímka by zachytila prechodný stav, zmena
+     * sa zachytí po pustení myši.
+     */
+    private boolean isEditingActive() {
+        return Pin.getInProgressWire() != null
+                || WireEnd.getGrabbedEnd() != null
+                || Movable.isComponentDragging()
+                || rubberBand != null;
+    }
+
+    /**
+     * Má fokus textový editor (JavaFX {@link TextInputControl} alebo RichTextFX CodeArea)?
+     * Skratky undo/redo sa vtedy ignorujú, aby neprepisovali prácu s textom.
+     */
+    private boolean isFocusInTextEditor() {
+        Node owner = getScene() == null ? null : getScene().getFocusOwner();
+        while (owner != null) {
+            if (owner instanceof TextInputControl) return true;
+            if (owner.getClass().getName().startsWith("org.fxmisc.richtext")) return true;
+            owner = owner.getParent();
+        }
+        return false;
+    }
+
+    /**
+     * Obnovenie snímky stavu z histórie - plocha sa vymaže a načíta sa uložená snímka.
+     */
+    private void restoreState(String xml) {
+        clearSelect();
+        if (isSimulationRunning()) powerOff();
+        isUndoRestoring = true;
+        try {
+            SchemeLoader.loadFromString(xml, this);
+        } finally {
+            isUndoRestoring = false;
+        }
+    }
+
+    /**
+     * Vyprázdnenie histórie undo/redo - pri načítaní súboru alebo novej schéme. Východiskom
+     * sa stane aktuálny stav plochy.
+     */
+    public void resetUndoHistory() {
+        undoStack.clear();
+        redoStack.clear();
+        lastUndoSnapshot = serializeState();
+    }
+
     /**
      * Pevná veľkosť bunky pre kreslenie súčiastok v pixeloch. Mriežka plochy (čiary aj
      * snap vodičov a súčiastok) môže byť jemnejšia, súčiastky si však držia pôvodnú
@@ -668,6 +824,7 @@ public class SchematicSheet extends ScrollPane {
 
     public void deleteSelect() {
         if (!isEditingEnabled()) return;
+        ensureUndoSynced();
         new ArrayList<>(selected).forEach(Selectable::delete);
         // zmazané objekty sa odstránia aj z výberu - vrátane tých, ktoré sa zmazali ako
         // vedľajší efekt (vodiče na pinoch mazanej súčiastky). Inak by ostali v zozname
@@ -884,6 +1041,7 @@ public class SchematicSheet extends ScrollPane {
      */
     public void pasteClipboard() {
         if (!isEditingEnabled()) return;
+        ensureUndoSynced();
         if (clipboardGates.isEmpty() && clipboardWires.isEmpty()) return;
 
         Point2D mouseOnGrid = lastMouseToGrid();
