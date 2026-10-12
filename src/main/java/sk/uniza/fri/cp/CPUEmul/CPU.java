@@ -879,6 +879,7 @@ public class CPU extends Thread {
             case "M": return Short.toUnsignedInt(regMP);
             case "S": return Short.toUnsignedInt(regSP);
             case "PC": return Short.toUnsignedInt(regPC);
+            case "F": return (flagZ ? 0x01 : 0) | (flagCY ? 0x02 : 0) | (flagIE ? 0x04 : 0);
         }
         throw new InvalidParameterException("Neplatny register");
     }
@@ -898,6 +899,10 @@ public class CPU extends Thread {
             case "M": regMP = (short) value; break;
             case "S": regSP = (short) value; break;
             case "PC": regPC = (short) value; break;
+            case "F": flagZ = (value & 0x01) != 0;
+                      flagCY = (value & 0x02) != 0;
+                      flagIE = (value & 0x04) != 0;
+                      break;
             default: throw new InvalidParameterException("Neplatny register");
         }
     }

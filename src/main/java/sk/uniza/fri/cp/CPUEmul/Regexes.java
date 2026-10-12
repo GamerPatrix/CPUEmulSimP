@@ -22,4 +22,7 @@ final class Regexes {
     static final String rShortBin = "^[0-1]{1,16}b$";
     static final String rShort = String.join("|", rShortDec, rShortHex, rShortBin, rShortOct);
 
+    //navestie - identifikátor, nesmie začínať číslicou
+    static final String rLabel = "[a-zA-Z_][a-zA-Z0-9_]*";
+
 }

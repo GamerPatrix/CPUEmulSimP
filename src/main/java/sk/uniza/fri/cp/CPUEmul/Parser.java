@@ -19,8 +19,8 @@ import java.util.regex.Pattern;
  */
 public class Parser extends Task<Program>{
 
-    private static final String LABEL_PATTERN = "^\\s*\\w+:"; //po zaciatku riadku ziadna alebo viac whitespace znakov, [a-zA-Z_0-9] a dvojbodka
-    private static final String COMMENT_PATTERN = "(?m);.*$"; //vsetko za bodkociarkou po koniec riadku
+    private static final String LABEL_PATTERN = "^\\s*" + Regexes.rLabel + ":"; //identifikátor (nesmie začínať číslicou) a dvojbodka na začiatku riadku
+    private static final String COMMENT_PATTERN = "(?m)(?:(?<!');|(?<=');(?!')).*$"; //vsetko za bodkociarkou po koniec riadku (okrem ';' ako znaku v uvodzovkach)
 
     //KOD
     private String code;
@@ -173,12 +173,15 @@ public class Parser extends Task<Program>{
 
                     //existuje uz dane navestie?
                     if(!labels.containsKey(label)) {
+                        boolean isInterruptLabel = false;
+
                         //kontrola, ci sa jedna o navestie pre prerusenie
                         if(label.matches("[iI][nN][tT].*")){
                             // Karpis - navestie musi byt int00 az int15
                             // alebo aj int00 az int0f
                             if(label.matches("[iI][nN][tT]([0]\\d|[1][012345]|[0][abcdef])")){
                                 //splna podmienky navestia pre prerusenie
+                                isInterruptLabel = true;
                                 int intNumber;
 
                                 if(label.matches("int0\\p{XDigit}")){
@@ -202,9 +205,10 @@ public class Parser extends Task<Program>{
                             }
                         }
 
-                        //obycajne navestie aj prerusenie, aby sa bolo mozne nan odkazova
-                        labels.put(label, instructions.size()); //index nasledujucej instrukcie, ktora bude pridana
-
+                        //obycajne navestie - navestia preruseni (int00..int15) su rezervovane pre obsluhu preruseni
+                        if(!isInterruptLabel){
+                            labels.put(label, instructions.size()); //index nasledujucej instrukcie, ktora bude pridana
+                        }
                     } else {
                         addError("Návestie " + label + " už existuje", lineIndex);
                     }
@@ -273,8 +277,12 @@ public class Parser extends Task<Program>{
                                 case 1:
                                     //ak je instrukcia BYTE, zaved konstantu do pamate ale nie instrukciu do programu
                                     if(codeInstruction == enumInstructionsSet.BYTE){
-                                        byte b = (byte) parseConstant(instructionParts.get(1));
-                                        progMemory.add(b);
+                                        if(progMemory.size() >= 256){
+                                            addError("Príliš veľa pseudoinštrukcií BYTE - maximálne 256 konštánt", lineIndex);
+                                        } else {
+                                            byte b = (byte) parseConstant(instructionParts.get(1));
+                                            progMemory.add(b);
+                                        }
                                     } else {
                                         instructions.add(new Instruction(codeInstruction, instructionParts.get(1)));
                                     }
@@ -316,7 +324,7 @@ public class Parser extends Task<Program>{
         }
 
         //ak je program v poriadku, preved navestia na indexy
-        if(!hasError && labels.size() > 0) transformLabelsToIndexes();
+        if(!hasError && !instructionsWithLabels.isEmpty()) transformLabelsToIndexes();
 
         //zmensenie pola arraylistu na minimum
         instructions.trimToSize();

@@ -1,6 +1,7 @@
 package sk.uniza.fri.cp.CPUEmul;
 
 import static sk.uniza.fri.cp.CPUEmul.Regexes.rByte;
+import static sk.uniza.fri.cp.CPUEmul.Regexes.rLabel;
 import static sk.uniza.fri.cp.CPUEmul.Regexes.rShort;
 
 /**
@@ -59,32 +60,32 @@ enum enumInstructionsSet{
     LDR("(?i)A|B|C|D", "(?i)A|B|C|D"),
 
     //inst. vetvenia
-    JMP("\\w+", true),
-    JZR("\\w+", true),
-    JNZ("\\w+", true),
-    JCY("\\w+", true),
-    JNC("\\w+", true),
-    JL("\\w+", true),
-    JG("\\w+", true),
-    JE("\\w+", true),
-    JLE("\\w+", true),
-    JGE("\\w+", true),
-    JNE("\\w+", true),
-    JNL("\\w+", true),
-    JNG("\\w+", true),
-    CAL("\\w+", true),
-    CZR("\\w+", true),
-    CNZ("\\w+", true),
-    CCY("\\w+", true),
-    CNC("\\w+", true),
-    CL("\\w+", true),
-    CG("\\w+", true),
-    CE("\\w+", true),
-    CLE("\\w+", true),
-    CGE("\\w+", true),
-    CNE("\\w+", true),
-    CNL("\\w+", true),
-    CNG("\\w+", true),
+    JMP(rLabel, true),
+    JZR(rLabel, true),
+    JNZ(rLabel, true),
+    JCY(rLabel, true),
+    JNC(rLabel, true),
+    JL(rLabel, true),
+    JG(rLabel, true),
+    JE(rLabel, true),
+    JLE(rLabel, true),
+    JGE(rLabel, true),
+    JNE(rLabel, true),
+    JNL(rLabel, true),
+    JNG(rLabel, true),
+    CAL(rLabel, true),
+    CZR(rLabel, true),
+    CNZ(rLabel, true),
+    CCY(rLabel, true),
+    CNC(rLabel, true),
+    CL(rLabel, true),
+    CG(rLabel, true),
+    CE(rLabel, true),
+    CLE(rLabel, true),
+    CGE(rLabel, true),
+    CNE(rLabel, true),
+    CNL(rLabel, true),
+    CNG(rLabel, true),
     RET(),
 
     //specialne instrukcie
