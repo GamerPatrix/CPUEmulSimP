@@ -11,7 +11,7 @@ import sk.uniza.fri.cp.Bus.Bus;
 import sk.uniza.fri.cp.SchematicSim.Buses.BusSymbol;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
 
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -64,7 +64,11 @@ public class SchematicSimulator {
                             if (gate instanceof BusSymbol) ((BusSymbol) gate).syncFromBus();
                         }
 
-                        HashSet<GateSymbol> gatesToUpdate = new HashSet<>();
+                        // LinkedHashSet (nie HashSet) - poradie simulovania hradiel pri viacvstupovej
+                        // fan-out udalosti musi byt deterministicke (podla poradia zaevidovania),
+                        // inak sa sukciastky vedia prepočítat v nahodnom poradi a na zbernici
+                        // sa objavia prechodne (glitchove) stavy
+                        LinkedHashSet<GateSymbol> gatesToUpdate = new LinkedHashSet<>();
                         SheetEvent event;
                         long lastActivityTime = System.currentTimeMillis();
                         boolean steadyState = false;

@@ -639,11 +639,28 @@ public class ControlBus extends BusSymbol {
     public void simulate() {
         // simulujeme zápis na zbernicu pre vstupné signály (IT)
         boolean it = false;
+        boolean hasInputTap = false;
         for (TapPoint tap : taps) {
             if (!INPUT_SIGNAL[tap.signal]) continue;
-            if (!isHigh(tap.pin)) continue;
-            it = true;
+            hasInputTap = true;
+            Potential p = tap.pin.getPotential();
+            Potential.Value level = (tap.pin.isConnected() && p != null) ? p.getValue() : Potential.Value.NC;
+            // plávajúci (NC/neurčitý) vstup sa zámerne NEvyhodnocuje ako HIGH - pri prechodnom
+            // stave siete (reset, presun vodiča) by inak náhodná hodnota z Potential.getFloatingValue
+            // vyvolala falošné prerusenie. Prerusenie vznikne iba z definovanej úrovne HIGH.
+            if (level == Potential.Value.HIGH) {
+                tap.pin.setState(Pin.PinState.HIGH);
+                it = true;
+            } else if (level == Potential.Value.LOW) {
+                tap.pin.setState(Pin.PinState.LOW);
+            } else {
+                tap.pin.setState(Pin.PinState.NOT_CONNECTED);
+            }
         }
+        // Riadiacu zbernicu (IT) smie zapisovať iba táto súčiastka, ak má vstupný vývod (IT).
+        // Bez tejto podmienky by každá ďalšia ControlBus na ploche (IW/, IR/, IA/ bez IT vývodu)
+        // pri svojom simulate() prepísala IT na false - vznikal by periodický blikajúci IT.
+        if (!hasInputTap) return;
         getBus().setIT(it);
     }
 

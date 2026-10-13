@@ -184,7 +184,9 @@ public class CPU extends Thread {
                     // pocitanie instrukcii
                     NumOfInstr++;
 
-                    //kontrola vyvolania prerusenia
+                    //kontrola vyvolania prerusenia - najprv pockame, kym sa obvod ustali,
+                    //aby sme neodchytili prechodny stav (napr. do casu, kym sa ustali IT)
+                    waitForSteadySimulation(null, false);
                     it = bus.isIT();
 
                     //ak je povolene prerusenie a aj vyvolane

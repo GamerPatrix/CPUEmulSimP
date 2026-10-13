@@ -828,7 +828,7 @@ public class SchematicSheet extends ScrollPane {
             MenuItem deleteUnused = new MenuItem("Vymazať nezapojené vodiče");
             deleteUnused.setOnAction(e -> deleteUnusedWires());
 
-            MenuItem mergeCollinear = new MenuItem("Zlúčiť kolineárne vodiče (aj protichodné)");
+            MenuItem mergeCollinear = new MenuItem("Zlúčiť kolineárne vodiče");
             mergeCollinear.setOnAction(e -> mergeCollinearWires());
 
             backgroundMenu.getItems().addAll(deleteUnused, mergeCollinear);
