@@ -42,6 +42,7 @@ import sk.uniza.fri.cp.App.CPUControl.CodeEditor.CodeEditorFactory;
 import sk.uniza.fri.cp.App.CPUControl.CodeEditor.RichTextFXHelpers;
 import sk.uniza.fri.cp.App.CPUControl.io.ConsoleOutputStream;
 import sk.uniza.fri.cp.App.SchematicControl.SchematicController;
+import sk.uniza.fri.cp.App.WindowSettings;
 import sk.uniza.fri.cp.Bus.Bus;
 import sk.uniza.fri.cp.CPUEmul.CPU;
 import sk.uniza.fri.cp.CPUEmul.CPUStates;
@@ -197,10 +198,7 @@ public class CPUController implements Initializable {
     private double lastConsoleDividerPos;   //posledna pozicia velkosti konzoly
 
     //Kontinualne updateovanie GUI
-    @FXML private Slider sliderUpdateGUIInt;
-    @FXML private Label lbUpdateGUIIntValue;
     @FXML private CheckMenuItem chmiSettingsAllowUpdateGUI;
-    @FXML private HBox hboxUpdateGUIInt;
     volatile private int GUIUpdateInt = 150;
 
     private Service updateGUIService = new Service() {
@@ -330,10 +328,15 @@ public class CPUController implements Initializable {
 
         btnSimulator.setDisable(true);
 
-        //inicializacia pozicie oddelovacov v horizontalnom SplitPaneli
+        //inicializacia pozicie oddelovacov v SplitPaneloch a obnovenie zapamätaného rozloženia
+        WindowSettings.restoreDivider("cpu.horiz", splitPaneHoriz);
         defSplitPaneHorizDividerPositions = splitPaneHoriz.getDividerPositions();
 
-        splitPaneVert.getDividers().get(0).setPosition(0.71);
+        lastConsoleDividerPos = WindowSettings.getDouble("cpu.consoleLastPos", 0.71);
+        if (!WindowSettings.restoreDivider("cpu.console", splitPaneVert)) {
+            splitPaneVert.getDividers().get(0).setPosition(0.71);
+        }
+        titPaneConsole.setExpanded(WindowSettings.getBoolean("cpu.consoleExpanded", true));
         titPaneConsole.expandedProperty().addListener(new ChangeListener<Boolean>() {
             @Override
             public void changed(ObservableValue<? extends Boolean> observable, Boolean oldValue, Boolean newValue) {
@@ -343,8 +346,14 @@ public class CPUController implements Initializable {
                     lastConsoleDividerPos = splitPaneVert.getDividers().get(0).getPosition();
                     splitPaneVert.getDividers().get(0).setPosition(1);
                 }
+                WindowSettings.putBoolean("cpu.consoleExpanded", newValue);
+                if (!newValue) {
+                    WindowSettings.putDouble("cpu.consoleLastPos", lastConsoleDividerPos);
+                }
             }
         });
+        WindowSettings.trackDivider("cpu.horiz", splitPaneHoriz);
+        WindowSettings.trackDivider("cpu.console", splitPaneVert);
 
         //Akceleratory
         Platform.runLater(()->{
@@ -389,15 +398,6 @@ public class CPUController implements Initializable {
                             .showWarning();
                 }
             });
-        });
-
-        //Stavovy riadok - GUI Update
-        sliderUpdateGUIInt.valueProperty().addListener(new ChangeListener<Number>() {
-            @Override
-            public void changed(ObservableValue<? extends Number> observable, Number oldValue, Number newValue) {
-                GUIUpdateInt = (int) sliderUpdateGUIInt.getValue();
-                lbUpdateGUIIntValue.setText(String.valueOf(GUIUpdateInt));
-            }
         });
 
         initCPU();
@@ -772,10 +772,8 @@ public class CPUController implements Initializable {
 
         if (isSelected) {
             updateGUIService.restart();
-            hboxUpdateGUIInt.setDisable(false);
         } else {
             updateGUIService.cancel();
-            hboxUpdateGUIInt.setDisable(true);
         }
 
         chmiSettingsAllowUpdateGUI.setSelected(isSelected);

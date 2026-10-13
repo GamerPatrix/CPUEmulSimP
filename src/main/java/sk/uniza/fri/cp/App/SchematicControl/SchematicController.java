@@ -23,6 +23,7 @@ import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import org.controlsfx.control.ToggleSwitch;
 import sk.uniza.fri.cp.App.CPUControl.CPUController;
+import sk.uniza.fri.cp.App.WindowSettings;
 import sk.uniza.fri.cp.CPUEmul.CPUStates;
 import sk.uniza.fri.cp.SchematicSim.Buses.AddressBus16;
 import sk.uniza.fri.cp.SchematicSim.Buses.ControlBus;
@@ -103,6 +104,8 @@ public class SchematicController {
         //rozloženie okna
         SplitPane editableArea = new SplitPane(this.itemPicker, this.sheet);
         editableArea.setDividerPositions(0.13);
+        WindowSettings.restoreDivider("schematic.palette", editableArea);
+        WindowSettings.trackDivider("schematic.palette", editableArea);
 
         this.root = new BorderPane();
         this.root.setTop(buildToolbar());

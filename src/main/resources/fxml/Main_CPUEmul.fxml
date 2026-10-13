@@ -177,29 +177,18 @@
             <HBox minWidth="50.0" prefHeight="100.0" prefWidth="50.0" spacing="10.0" HBox.hgrow="ALWAYS">
                <children>
                   <ProgressBar fx:id="progressBar" prefWidth="200.0" progress="0.0" />
-                  <Label fx:id="lbStatus" text="Stav" />
-               </children>
-            </HBox>
-             <HBox fx:id="hboxUpdateGUIInt" alignment="CENTER_RIGHT" minWidth="50.0" prefHeight="100.0" prefWidth="50.0"
-                   spacing="5.0" HBox.hgrow="ALWAYS">
-               <children>
-                  <Label alignment="CENTER_RIGHT" contentDisplay="RIGHT" text="Interval obnovy GUI" textAlignment="RIGHT" />
-                   <Slider fx:id="sliderUpdateGUIInt" blockIncrement="5.0" majorTickUnit="10.0" max="150.0" min="10.0"
-                           minorTickCount="5" snapToTicks="true" value="150.0" HBox.hgrow="NEVER"/>
-                   <Label fx:id="lbUpdateGUIIntValue" alignment="CENTER_RIGHT" contentDisplay="RIGHT" minWidth="25.0"
-                          text="150" textAlignment="RIGHT"/>
-                  <Label text="ms" />
-               </children>
-            </HBox>
-         </children>
-         <padding>
-            <Insets bottom="3.0" left="3.0" right="3.0" top="3.0" />
-         </padding>
-         <BorderPane.margin>
-            <Insets left="5.0" right="5.0" />
-         </BorderPane.margin>
-      </HBox>
-   </bottom>
+<Label fx:id="lbStatus" text="Stav" />
+                </children>
+             </HBox>
+          </children>
+          <padding>
+             <Insets bottom="3.0" left="3.0" right="3.0" top="3.0" />
+          </padding>
+          <BorderPane.margin>
+             <Insets left="5.0" right="5.0" />
+          </BorderPane.margin>
+       </HBox>
+    </bottom>
    <center>
       <SplitPane fx:id="splitPaneVert" dividerPositions="0.5" orientation="VERTICAL" BorderPane.alignment="TOP_CENTER">
          <items>

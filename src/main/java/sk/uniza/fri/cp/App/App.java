@@ -81,8 +81,10 @@ public class App extends Application {
         primaryStage.setScene(mainScene);
         primaryStage.setTitle(WINDOW_TITLE);
         primaryStage.getIcons().add(new Image(getClass().getResourceAsStream("/icons/cpu_icon.png")));
+        WindowSettings.restore("cpu", primaryStage, CPU_WINDOW_WIDTH, CPU_WINDOW_HEIGHT);
         primaryStage.show();
         primStage = primaryStage;
+        WindowSettings.track("cpu", primaryStage);
 
         // SchematicSim - okno kreslenia schémy, ktoré otvára tlačidlo Simulátor.
         // Nahradilo pôvodné okno Breadboard sim.
@@ -92,6 +94,8 @@ public class App extends Application {
         schematicStage.setTitle("Simulátor - Schéma");
         schematicStage.getIcons().add(new Image(getClass().getResourceAsStream("/icons/simulator_icon_128.png")));
         schematicStage.setScene(schematicController.getScene());
+        WindowSettings.restore("schematic", schematicStage, 1280, 850);
+        WindowSettings.track("schematic", schematicStage);
 
         // klávesové skratky a mazanie objektov
         schematicController.registerKeyboardHandlers();
