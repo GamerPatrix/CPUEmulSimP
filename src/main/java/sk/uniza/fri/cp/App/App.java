@@ -32,6 +32,9 @@ public class App extends Application {
 
     @Override
     public void start(Stage primaryStage) throws Exception {
+        //nacitanie predvolenych farieb vodicov schémy
+        WireColorSettings.loadAndApply();
+
         //nacitanie sablony okna CPU
         FXMLLoader CpuLayoutLoader = new FXMLLoader();
         CpuLayoutLoader.setLocation(getClass().getResource("/fxml/Main_CPUEmul.fxml"));

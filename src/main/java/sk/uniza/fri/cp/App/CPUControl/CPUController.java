@@ -49,6 +49,7 @@ import sk.uniza.fri.cp.CPUEmul.CPUStates;
 import sk.uniza.fri.cp.CPUEmul.Exceptions.InvalidCodeLinesException;
 import sk.uniza.fri.cp.CPUEmul.Parser;
 import sk.uniza.fri.cp.CPUEmul.Program;
+import sk.uniza.fri.cp.App.WireColorSettings;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 
 import javax.swing.*;
@@ -777,6 +778,15 @@ public class CPUController implements Initializable {
         }
 
         chmiSettingsAllowUpdateGUI.setSelected(isSelected);
+    }
+
+    /**
+     * Otvorenie nastavenia farieb vodičov schémy (Nastavenia → Farby vodičov...).
+     */
+    @FXML
+    private void handleMenuSettingsWireColorsAction(){
+        SchematicSheet sheet = schematicController != null ? schematicController.getSheet() : null;
+        WireColorSettings.showEditor(sheet, primStage);
     }
 
     /**

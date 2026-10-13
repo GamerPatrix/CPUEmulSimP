@@ -3,6 +3,7 @@ package sk.uniza.fri.cp.SchematicSim.Wire;
 import javafx.application.Platform;
 import javafx.geometry.Point2D;
 import javafx.scene.Group;
+import javafx.scene.Node;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
@@ -362,12 +363,11 @@ public class WireJunction extends Joint implements Connectable {
         Connectable target = dropOther.getPin() != null ? (Connectable) dropOther.getPin() : dropOther.getJunction();
         Point2D targetPos = dropOther.getConnectionPoint();
 
-        // uvoľní cieľ, odpojí oba konce drop vodiča a zruší ho
-        dropOther.disconnect();
-        dropEnd.disconnect();
-        drop.delete();
-
-        // ponechaný koniec sa presunie na uvoľnený cieľ (alebo na jeho pozíciu)
+        // DÔLEŽITÉ: ponechaný koniec sa na cieľ napojí ešte PRED zrušením drop vodiča.
+        // Inak by {@code drop.delete()} (vnútorne {@link #processNow()}) zničil cieľový
+        // spájač - kým je keep koniec ešte odpojený, cieľ mal stupeň 1 a reconcile by ho
+        // odstránil; keepEnd by sa potom pripojil na už zničený (ghost) spájač a vodiče
+        // by nepatrili do jednej siete.
         keepEnd.disconnect();
         destroy(junction);
         if (target != null) {
@@ -375,7 +375,70 @@ public class WireJunction extends Joint implements Connectable {
         } else {
             keepEnd.moveTo(targetPos.getX(), targetPos.getY());
         }
+
+        // cieľová väzba už drží ponechaný vodič, takže zrušenie drop vodiča (odpojenie
+        // jeho vzdialenejšieho konca už nedeje stupeň cieľa pod 2) neprekreslí spojenie
+        drop.delete();
         keep.updateGeometry();
+    }
+
+    /**
+     * Zlúčenie prekrývajúcich sa kolineárnych vodičov - odstránenie "slepých výbežkov".
+     * <p>
+     * Ide o prípad, keď na spájači končia dva vodiče na tej istej priamke a od spájača
+     * vedú oba ROVNAKÝM smerom (jeden je dlhší, druhý - kratší - je jeho náhradným
+     * presahom, napr. vodič natiahnutý z B do C a potom z C naspäť cez B do A).
+     * Longer z oboch (užívateľsky "protichodný" priebeh) sa svojim koncom pri spájači
+     * presunie do spoločného bodu kratšieho a kratší sa zruší. Výsledkom je jediný
+     * vodič medzi vonkajšími koncami (odpadá nadbytočný presah).
+     * <p>
+     * Reconcile tento prípad automaticky nespúšťa (nebezpečné počas ťahov) - volá sa
+     * len explicitne z príkazu "Zlúčiť kolineárne vodiče" na ploche.
+     *
+     * @return true ak sa zlúčila aspoň jedna dvojica.
+     */
+    public static boolean mergeCollinearOverlaps(SchematicSheet sheet) {
+        if (sheet == null) return false;
+        boolean any = false;
+        for (Node node : new ArrayList<>(sheet.getJunctionsLayer().getChildren())) {
+            if (!(node instanceof WireJunction)) continue;
+            WireJunction junction = (WireJunction) node;
+            if (junction.isRemoved()) continue;
+            if (junction.connectedEnds.size() != 2) continue;
+
+            WireEnd end1 = junction.connectedEnds.get(0);
+            WireEnd end2 = junction.connectedEnds.get(1);
+            Wire wire1 = end1.getWire();
+            Wire wire2 = end2.getWire();
+            if (wire1 == null || wire2 == null || wire1 == wire2) continue;
+            if (isTemporary(wire1) || isTemporary(wire2)) continue;
+
+            WireEnd far1 = otherEnd(wire1, end1);
+            WireEnd far2 = otherEnd(wire2, end2);
+            Point2D dir1 = new Point2D(far1.getLayoutX() - junction.getLayoutX(),
+                    far1.getLayoutY() - junction.getLayoutY());
+            Point2D dir2 = new Point2D(far2.getLayoutX() - junction.getLayoutX(),
+                    far2.getLayoutY() - junction.getLayoutY());
+            if (dir1.magnitude() < EPS || dir2.magnitude() < EPS) continue;
+
+            double cross = dir1.getX() * dir2.getY() - dir1.getY() * dir2.getX();
+            double dot = dir1.getX() * dir2.getX() + dir1.getY() * dir2.getY();
+            if (Math.abs(cross) > EPS || dot <= 0) continue;
+
+            // oba vedú rovnakým smerom od spájača - dlhší ponecháme, kratší výbežok zrušíme
+            if (dir1.magnitude() > dir2.magnitude()) {
+                merge(junction, wire1, end1, wire2, end2);
+            } else {
+                merge(junction, wire2, end2, wire1, end1);
+            }
+            any = true;
+        }
+        return any;
+    }
+
+    /** Druhý koniec vodiča (opačný oproti {@code end}). */
+    private static WireEnd otherEnd(Wire wire, WireEnd end) {
+        return wire.getEnds()[0] == end ? wire.getEnds()[1] : wire.getEnds()[0];
     }
 
     /** Zničenie spájača - uvoľní všetky jeho konce a odstráni ho z plochy. */

@@ -16,6 +16,8 @@ import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
 import javafx.scene.Group;
 import javafx.scene.Node;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextInputControl;
 import javafx.scene.input.KeyCode;
@@ -34,6 +36,7 @@ import sk.uniza.fri.cp.SchematicSim.GridOccupancy;
 import sk.uniza.fri.cp.SchematicSim.GridSystem;
 import sk.uniza.fri.cp.SchematicSim.Item;
 import sk.uniza.fri.cp.SchematicSim.Movable;
+import sk.uniza.fri.cp.SchematicSim.ContextMenuHelper;
 import sk.uniza.fri.cp.SchematicSim.Selectable;
 import sk.uniza.fri.cp.SchematicSim.Wire.Joint;
 import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
@@ -70,6 +73,9 @@ public class SchematicSheet extends ScrollPane {
 
     private final double widthPx;
     private final double heightPx;
+
+    /** Pozadie plochy (mriežka) - príjemca klikov a panningu na voľnej ploche. */
+    private final Pane gridBackground;
 
     private final SchematicSimulator simulator;
     private final GridSystem gridSystem;
@@ -125,6 +131,9 @@ public class SchematicSheet extends ScrollPane {
      * pinoch a spájačoch (polovica mriežky = 5 px).
      */
     private static final double WIRE_DROP_TOLERANCE = 5;
+
+    /** Presnosť porovnávania polôh voľných koncov pri spájaní (zlúčenie vodičov). */
+    private static final double JOIN_EPS = 0.5;
     private final SimpleDoubleProperty scaleTotal = new SimpleDoubleProperty(1);
     //pan sa spustí len vtedy, ak stlačenie začalo na prázdnej ploche (nie na súčiastke,
     //vodiči, spájači či pine) - inak by pri začatí ťahu prvku plocha o kúsok ušla
@@ -188,6 +197,7 @@ public class SchematicSheet extends ScrollPane {
         this.occupancy = new GridOccupancy();
 
         Pane gridBackground = gridSystem.generateBackground(this.widthPx, this.heightPx, Color.WHITE, Color.LIGHTGRAY);
+        this.gridBackground = gridBackground;
         this.layersManager = new SheetLayersManager(gridBackground);
 
         // POZOR: narozdiel od Board tu nevzniká žiadna počiatočná SchoolBreadboard - plocha je prázdna
@@ -239,6 +249,14 @@ public class SchematicSheet extends ScrollPane {
             for (Wire wire : layersManager.getWires()) {
                 if (wire.getBoundsInParent().intersects(bandBounds)) addSelect(wire);
             }
+            event.consume();
+        });
+
+        // kontextové menu plochy: pravé tlačidlo na voľnej ploche
+        gridBackground.addEventHandler(MouseEvent.MOUSE_PRESSED, event -> {
+            if (event.getButton() != MouseButton.SECONDARY) return;
+            if (!isEditingEnabled()) return;
+            showBackgroundMenu(event.getScreenX(), event.getScreenY());
             event.consume();
         });
 
@@ -653,6 +671,132 @@ public class SchematicSheet extends ScrollPane {
 
     public void clearChange() {
         this.hasChanged = false;
+    }
+
+    // ===== KONTEXTOVÉ MENU PLOCHY =====
+
+    private ContextMenu backgroundMenu;
+
+    /**
+     * Zobrazenie kontextového menu plochy na voľnej ploche (pravé tlačidlo).
+     * Menu sa zavrie pri prvom kliknutí mimo neho ({@link ContextMenuHelper}).
+     */
+    private void showBackgroundMenu(double screenX, double screenY) {
+        if (backgroundMenu == null) {
+            backgroundMenu = new ContextMenu();
+
+            MenuItem deleteUnused = new MenuItem("Vymazať nezapojené vodiče");
+            deleteUnused.setOnAction(e -> deleteUnusedWires());
+
+            MenuItem mergeCollinear = new MenuItem("Zlúčiť kolineárne vodiče (aj protichodné)");
+            mergeCollinear.setOnAction(e -> mergeCollinearWires());
+
+            backgroundMenu.getItems().addAll(deleteUnused, mergeCollinear);
+        }
+        ContextMenuHelper.show(backgroundMenu, gridBackground, screenX, screenY);
+    }
+
+    /**
+     * Vymaže všetky vodiče, ktoré majú aspoň jeden voľný (nepripojený) koniec.
+     * Prebieha viacprechodovo - po odstránení vodiča sa môžu uvoľniť konce ďalších
+     * vodičov (strata napojenia cez spájač), preto sa opakuje, kým je čo mazať
+     * (s ochranou proti nekonečnej slučke). Rozpracované (preview) vodiče sú vynechané.
+     * Vracia počet vymazaných vodičov.
+     */
+    public int deleteUnusedWires() {
+        if (!isEditingEnabled()) return 0;
+        int count = 0;
+        boolean progress = true;
+        int guard = 0;
+        while (progress && guard++ < 64) {
+            progress = false;
+            for (Wire wire : layersManager.getWires()) {
+                if (wire.isPreview()) continue;
+                if (!wire.areBothEndsConnected()) {
+                    wire.delete();
+                    count++;
+                    progress = true;
+                }
+            }
+        }
+        if (count > 0) markChanged();
+        return count;
+    }
+
+    /**
+     * Zlúči kolineárne vodiče (vrátane protichodných) tak, že cez stupňovité a
+     * dvojbodové spoje prejde jediný priamy vodič. Opakuje sa dovtedy, kým k zlúčeniu
+     * dochádza (s ochranou proti nekonečnej slučke). Vracia počet prebehnutých kôl zlúčenia.
+     *
+     * <p>Krok 1: preznačí všetky spájače a nechá reconcile spojiť priame priechody cez
+     * spájače dvojitého stupňa ({@link WireJunction#processNow()}).
+     * <p>Krok 2: prekrývajúce sa kolineárne vodiče v rovnakom smere od spájača
+     * ("slepé výbežky") sa zlúčia - dlhší vodič sa presunie do bodu kratšieho.
+     * <p>Krok 3: voľné konce, ktoré ležia presne na rovnakom bode, sa spoja cez nový spájač -
+     * pri protichodných smeroch ich reconcile spojí do jedného vodiča.
+     */
+    public int mergeCollinearWires() {
+        if (!isEditingEnabled()) return 0;
+        int rounds = 0;
+        boolean progress = true;
+        int guard = 0;
+        while (progress && guard++ < 64) {
+            progress = false;
+            int wiresBefore = layersManager.getWires().size();
+
+            WireJunction.processNow();
+            for (Node node : new ArrayList<>(getJunctionsLayer().getChildren())) {
+                if (node instanceof WireJunction) {
+                    WireJunction junction = (WireJunction) node;
+                    if (!junction.isRemoved()) WireJunction.markDirty(junction);
+                }
+            }
+            WireJunction.processNow();
+
+            if (WireJunction.mergeCollinearOverlaps(this)) progress = true;
+
+            if (joinCoincidingFreeEnds()) progress = true;
+
+            if (layersManager.getWires().size() < wiresBefore) progress = true;
+            if (progress) rounds++;
+        }
+        if (rounds > 0) markChanged();
+        return rounds;
+    }
+
+    /**
+     * Spojenie voľných koncov vodičov, ktoré ležia na rovnakom bode, cez novovytvorený
+     * spájač. Pri protichodných kolineárnych koncoch ich reconcile zlúči do jedného vodiča.
+     *
+     * @return true ak sa spojil aspoň jeden pár koncov.
+     */
+    private boolean joinCoincidingFreeEnds() {
+        boolean any = false;
+        List<WireEnd> freeEnds = new ArrayList<>();
+        for (Wire wire : layersManager.getWires()) {
+            if (wire.isPreview()) continue;
+            for (WireEnd end : wire.getEnds()) {
+                if (!end.isConnected()) freeEnds.add(end);
+            }
+        }
+        for (int i = 0; i < freeEnds.size(); i++) {
+            WireEnd end = freeEnds.get(i);
+            if (end.isConnected()) continue;
+            Point2D pos = end.getConnectionPoint();
+            for (int j = i + 1; j < freeEnds.size(); j++) {
+                WireEnd other = freeEnds.get(j);
+                if (other.isConnected()) continue;
+                if (pos.distance(other.getConnectionPoint()) <= JOIN_EPS) {
+                    WireJunction junction = WireJunction.at(this, pos);
+                    WireJunction.markDirty(junction);
+                    end.connect(junction);
+                    other.connect(junction);
+                    any = true;
+                    break;
+                }
+            }
+        }
+        return any;
     }
 
     // ===== UNDO / REDO (CTRL+Z / CTRL+Y, CTRL+SHIFT+Z) =====

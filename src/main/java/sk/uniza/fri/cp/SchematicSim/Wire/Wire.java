@@ -47,10 +47,11 @@ public class Wire extends HighlightGroup {
 
     private static Color defaultColor = Color.BLACK;
 
-    // debug farby podľa logického stavu vodiča: Z - sivá, 0 - modrá, 1 - červená
-    private static final Color DEBUG_Z_COLOR = Color.GRAY;
-    private static final Color DEBUG_LOW_COLOR = Color.BLUE;
-    private static final Color DEBUG_HIGH_COLOR = Color.RED;
+    // debug farby podľa logického stavu vodiča: Z - sivá, 0 - modrá, 1 - červená.
+    // Sú konfigurovateľné z nastavení aplikácie (Nastavenia → Farby vodičov).
+    private static Color debugZColor = Color.GRAY;
+    private static Color debugLowColor = Color.BLUE;
+    private static Color debugHighColor = Color.RED;
 
     /** Tolerancia pre zistenie zarovnania koncov (pozície sú násobky mriežky). */
     private static final double ALIGN_EPS = 0.5;
@@ -173,6 +174,18 @@ public class Wire extends HighlightGroup {
         return defaultColor;
     }
 
+    public static Color getDebugZColor() {
+        return debugZColor;
+    }
+
+    public static Color getDebugLowColor() {
+        return debugLowColor;
+    }
+
+    public static Color getDebugHighColor() {
+        return debugHighColor;
+    }
+
     public void changeColor(Color newColor) {
         this.color = newColor;
         for (WireEnd end : this.ends) end.setDefaultColor();
@@ -182,6 +195,24 @@ public class Wire extends HighlightGroup {
 
     public Color getColor() {
         return this.color;
+    }
+
+    /**
+     * Nastavenie farieb vodičov v debug režime podľa logického stavu (Z, 0, 1).
+     * Uplatní sa na všetky vodiče pri najbližšom prekreslení.
+     */
+    public static void setDebugColors(Color z, Color low, Color high) {
+        debugZColor = z == null ? Color.GRAY : z;
+        debugLowColor = low == null ? Color.BLUE : low;
+        debugHighColor = high == null ? Color.RED : high;
+    }
+
+    /**
+     * Prekreslenie farby tohto vodiča podľa aktuálnych (prípadne zmenených) nastavení.
+     */
+    public void refreshAppearance() {
+        refreshLines();
+        if (this.isSelected()) applyHighlight(1);
     }
 
     /**
@@ -217,11 +248,11 @@ public class Wire extends HighlightGroup {
      */
     Color getCurrentColor() {
         if (!this.debugColored) return this.color;
-        if (this.potential == null) return DEBUG_Z_COLOR;
+        if (this.potential == null) return debugZColor;
         switch (this.potential.getValue()) {
-            case HIGH: return DEBUG_HIGH_COLOR;
-            case LOW: return DEBUG_LOW_COLOR;
-            default: return DEBUG_Z_COLOR;
+            case HIGH: return debugHighColor;
+            case LOW: return debugLowColor;
+            default: return debugZColor;
         }
     }
 

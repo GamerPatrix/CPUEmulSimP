@@ -94,6 +94,8 @@
                       <CheckMenuItem fx:id="chmiSettingsAllowUpdateGUI" mnemonicParsing="false"
                                      onAction="#handleMenuSettingsAllowUpdateGUIAction" selected="true"
                                      text="Povoliť aktualizáciu GUI"/>
+                        <SeparatorMenuItem mnemonicParsing="false" />
+                        <MenuItem mnemonicParsing="false" onAction="#handleMenuSettingsWireColorsAction" text="Farby vodičov..."/>
                   </items>
                 </Menu>
                 <Menu mnemonicParsing="false" text="Pomoc">
