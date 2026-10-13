@@ -301,6 +301,14 @@ public class Wire extends HighlightGroup {
         return this.ends[0].getJunction();
     }
 
+    /**
+     * Orientácia L-tvaru počas aktívneho ťahu: {@code true} = prvé rameno vodorovné
+     * ({@code false} = zvislé), {@code null} = os ešte nebola zamknutá (krátky ťah).
+     */
+    public Boolean getCreationAxis() {
+        return this.previewAxis;
+    }
+
     boolean isHorizontal() {
         return this.horizontal;
     }

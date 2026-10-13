@@ -134,6 +134,9 @@ public class SchematicSheet extends ScrollPane {
 
     /** Presnosť porovnávania polôh voľných koncov pri spájaní (zlúčenie vodičov). */
     private static final double JOIN_EPS = 0.5;
+
+    /** Presnosť testu kolinearity pri presune spájača odbočky na kolmý náprotivok. */
+    private static final double COLLINEAR_EPS = 0.5;
     private final SimpleDoubleProperty scaleTotal = new SimpleDoubleProperty(1);
     //pan sa spustí len vtedy, ak stlačenie začalo na prázdnej ploche (nie na súčiastke,
     //vodiči, spájači či pine) - inak by pri začatí ťahu prvku plocha o kúsok ušla
@@ -465,6 +468,14 @@ public class SchematicSheet extends ScrollPane {
                     return;
                 }
 
+                // 2b) odbočka začatá ťahaním z bodu NA priamom vodiči: spájač sa presunie
+                // na miesto, kde sa L-tvar odbočky stretáva s pôvodným vodičom KOLMO (roh)
+                if (inProgress != null && relocateTapToPerpendicularFoot(inProgress)) {
+                    finishWireDrop(inProgress);
+                    event.consume();
+                    return;
+                }
+
                 // 3) pustenie priamo na vodič = rozdelenie v mieste pustenia
                 Wire targetWire = findAncestor(picked, Wire.class);
                 if (targetWire != null) {
@@ -576,6 +587,135 @@ public class SchematicSheet extends ScrollPane {
         } else {
             WireEnd.finishGrab();
         }
+    }
+
+    /**
+     * Presunie spájač odbočky na miesto, kde sa odbočka stretáva s pôvodným vodičom
+     * KOLMO. Ak sa ťah nového vodiča začal v bode ležiacom na priamom vodiči, začiatok
+     * ťahu tam vytvoril spájač. Ak prvé rameno nového vodiča ide po pôvodnej priamke
+     * (kolineárne) a až druhé rameno odbočí kolmo, spájač na mieste začiatku ostáva
+     * "neviditeľne" sedieť na priamke bez odbočky. Správne miesto je roh L-tvaru - kolmý
+     * náprotivok voľného konca na priamke. Pôvodná priamka sa v rohu rozdelí a všetko sa
+     * doň prepája; na priamke tak zostanú len dve priame časti (napr. AX, XC) a kolmá
+     * odbočka (napr. XD).
+     *
+     * @return true, ak sa odbočka presunula (spájač začiatku zanikol)
+     */
+    private boolean relocateTapToPerpendicularFoot(Wire branch) {
+        WireJunction anchor = branch.getStartJunction();
+        if (anchor == null || anchor.isRemoved()) return false;
+        if (branch.getEnds()[0].getJunction() != anchor) return false;
+
+        List<Wire> wires = anchor.getConnectedWires();
+        if (wires.size() != 3) return false;
+
+        // dve priamočiare polovice pôvodného vodiča (okrem odbočky)
+        Wire half1 = null;
+        Wire half2 = null;
+        WireEnd near1 = null;
+        WireEnd near2 = null;
+        for (Wire wire : wires) {
+            if (wire == branch) continue;
+            WireEnd near = endAt(wire, anchor);
+            if (near == null) return false; // vodič pripojený oboma koncami = most
+            if (half1 == null) {
+                half1 = wire;
+                near1 = near;
+            } else if (half2 == null) {
+                half2 = wire;
+                near2 = near;
+            } else {
+                return false; // viac ako dve polovice - nezvyčajný uzol, necháme tak
+            }
+        }
+        if (half1 == null || half2 == null) return false;
+
+        Point2D b = anchor.getConnectionPoint();
+        Point2D far1 = otherEndPos(half1, near1);
+        Point2D far2 = otherEndPos(half2, near2);
+
+        // obe polovice musia tvoriť jednu priamku (opačné smery, kolineárne)
+        double v1x = far1.getX() - b.getX();
+        double v1y = far1.getY() - b.getY();
+        double v2x = far2.getX() - b.getX();
+        double v2y = far2.getY() - b.getY();
+        if (Math.abs(v1x * v2y - v1y * v2x) > COLLINEAR_EPS) return false;
+        if (v1x * v2x + v1y * v2y >= 0) return false;
+
+        boolean horizontalLine = Math.abs(v1y) < COLLINEAR_EPS && Math.abs(v2y) < COLLINEAR_EPS;
+        boolean verticalLine = Math.abs(v1x) < COLLINEAR_EPS && Math.abs(v2x) < COLLINEAR_EPS;
+        if (!horizontalLine && !verticalLine) return false;
+
+        // prvé rameno odbočky musí ísť po priamke - inak je spájač na začiatku správny
+        Boolean axis = branch.getCreationAxis();
+        if (axis == null || horizontalLine != axis) return false;
+
+        // roh L-tvaru = kolmý náprotivok voľného konca na priamke (zarovnaný na mriežku)
+        WireEnd freeEnd = branch.catchFreeEnd();
+        if (freeEnd.isConnected()) return false;
+        Point2D free = freeEnd.getConnectionPoint();
+        double grid = getGrid().getSizeMin();
+        double fx = Math.round(free.getX() / grid) * grid;
+        double fy = Math.round(free.getY() / grid) * grid;
+        Point2D corner = horizontalLine ? new Point2D(fx, b.getY()) : new Point2D(b.getX(), fy);
+
+        // kolmé rameno aj posun po priamke musia byť zmysluplné (aspoň pol mriežky)
+        if (corner.distance(free) < grid / 2.0) return false;
+        if (corner.distance(b) < grid / 2.0) return false;
+
+        // polovica, na ktorej roh leží (pozdĺž priamky, v smere prveho ramena)
+        double sx = corner.getX() - b.getX();
+        double sy = corner.getY() - b.getY();
+        boolean towardFirst = (v1x * sx + v1y * sy) > 0;
+        Wire toward = towardFirst ? half1 : half2;
+        Wire other = towardFirst ? half2 : half1;
+
+        // rozdelenie priamky v rohu
+        WireJunction cornerJunction = toward.splitAtPoint(corner);
+        if (cornerJunction == null || cornerJunction.isRemoved()) return false;
+
+        WireEnd otherNear = endAt(other, anchor);
+        WireEnd branchNear = endAt(branch, anchor);
+        if (otherNear == null || branchNear == null) return false;
+
+        otherNear.connect(cornerJunction);  // druhá polovica priamky -> roh (napr. AX)
+        branchNear.connect(cornerJunction); // odbočka: roh -> kam sa ťahalo (napr. XD)
+
+        // rozdelenie priamky ponechalo v pôvodnom vodiči vzdialenejšiu časť (roh..C)
+        // a vytvorilo nový vodič roh..B; tento slepý presah sa zruší. Kratšia/nadbytočná
+        // časť spájajúca roh s pôvodným spájačom je tá, ktorá má koniec na spájači B.
+        for (Wire stub : new ArrayList<>(cornerJunction.getConnectedWires())) {
+            if (stub == other || stub == branch) continue;
+            boolean atAnchor = false;
+            for (WireEnd end : stub.getEnds()) {
+                if (end.getJunction() == anchor) {
+                    atAnchor = true;
+                    break;
+                }
+            }
+            if (atAnchor) {
+                stub.delete(); // uvoľní spájač B, ktorý tým zanikne
+                break;
+            }
+        }
+        WireJunction.processNow();
+
+        return true;
+    }
+
+    /** Koniec vodiča pripojený na daný spájač (null, ak taký neexistuje). */
+    private WireEnd endAt(Wire wire, WireJunction junction) {
+        if (wire == null || junction == null) return null;
+        for (WireEnd end : wire.getEnds()) {
+            if (end.getJunction() == junction) return end;
+        }
+        return null;
+    }
+
+    /** Vzdialenejší koniec vodiča (ten, ktorý nie je {@code near}). */
+    private Point2D otherEndPos(Wire wire, WireEnd near) {
+        WireEnd other = wire.getEnds()[0] == near ? wire.getEnds()[1] : wire.getEnds()[0];
+        return other.getConnectionPoint();
     }
 
     /**
