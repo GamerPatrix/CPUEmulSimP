@@ -44,6 +44,7 @@ import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -101,6 +102,14 @@ public class SchematicSheet extends ScrollPane {
     private final ArrayDeque<String> redoStack = new ArrayDeque<>();
     private String lastUndoSnapshot;
     private boolean isUndoRestoring = false;
+
+    /**
+     * Spájače, ktoré sa práve presúvajú pevne spolu so skupinou súčiastok (viacnásobný
+     * ťah). Počas takéhoto presunu ich vodičová kaskáda nesmie posúvať kolmo zvlášť -
+     * inak by sa spájač pri každom napojenom vodiči pohol viackrát. Prázdna množina,
+     * ak sa žiadny hromadný presun nekoná.
+     */
+    private Set<WireJunction> groupMoveCarried = Collections.emptySet();
 
     /** Povolenie editácie schémy (pridávanie/mazanie/presun vodičov a súčiastok). */
     private final SimpleBooleanProperty editingEnabled = new SimpleBooleanProperty(true);
@@ -619,6 +628,19 @@ public class SchematicSheet extends ScrollPane {
 
     public boolean hasChanged() {
         return hasChanged;
+    }
+
+    /**
+     * Dočasné označenie spájačov, ktoré sa práve presúvajú pevne spolu so skupinou
+     * súčiastok. Kým je označenie aktívne, vodičová kaskáda ({@code Wire#onEndMoved})
+     * takéto spájače neposúva kolmo zvlášť - ich polohu riadi hromadný presun.
+     */
+    public void setGroupMoveCarried(Set<WireJunction> carried) {
+        this.groupMoveCarried = carried == null ? Collections.emptySet() : carried;
+    }
+
+    public boolean isGroupMoveCarried(WireJunction junction) {
+        return groupMoveCarried.contains(junction);
     }
 
     /**

@@ -411,11 +411,17 @@ public class Wire extends HighlightGroup {
             return;
         }
 
-        WireEnd other = otherEnd(end);
+WireEnd other = otherEnd(end);
         if (!other.isConnected()) {
             other.moveTo(other.getLayoutX() + deltaX, other.getLayoutY() + deltaY);
         } else if (other.getJunction() != null) {
-            // pohyb spájača: len kolmá zložka voči tomuto vodiči
+            if (getSheet().isGroupMoveCarried(other.getJunction())) {
+                // spájač sa práve presúva pevne spolu so skupinou súčiastok - posun ho
+                // nesmie kaskádovať kolmo na tento vodič (posunú ho všetky naraz)
+                updateGeometry();
+                return;
+            }
+            // pohyb spájača: len kolmá zložka voči tomuto vodiču
             double moveX = 0;
             double moveY = 0;
             if (this.horizontal) moveY = deltaY;

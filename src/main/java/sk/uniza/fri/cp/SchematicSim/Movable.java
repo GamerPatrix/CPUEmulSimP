@@ -7,10 +7,18 @@ import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.input.MouseEvent;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
+import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
+import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
+import sk.uniza.fri.cp.SchematicSim.Wire.WireEnd;
 import sk.uniza.fri.cp.SchematicSim.Wire.WireJunction;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Set;
 
 /**
  * Objekt s ktorým je možné pohybovať pomocou kurzora na ploche schémy, so snapovaním na mriežku.
@@ -87,12 +95,28 @@ public abstract class Movable extends HighlightGroup {
             if (this instanceof GateSymbol && isSelected()) {
                 int changeX = gridX - dragLastGridX;
                 int changeY = gridY - dragLastGridY;
-                for (GateSymbol other : sheet.getSelectedGates()) {
-                    if (other != this) other.moveBy(changeX, changeY);
+                List<GateSymbol> selectedGates = sheet.getSelectedGates();
+                Set<WireJunction> carried = (changeX != 0 || changeY != 0)
+                        ? collectCarriedJunctions(sheet, selectedGates)
+                        : Collections.emptySet();
+                sheet.setGroupMoveCarried(carried);
+                try {
+                    for (GateSymbol other : selectedGates) {
+                        if (other != this) other.moveBy(changeX, changeY);
+                    }
+                    moveTo(gridX, gridY);
+                    // spájače vo vnútri presúvanej skupiny sa presunú pevne o celý posun -
+                    // kaskáda vodičov by ich inak posunula len kolmo a viackrát
+                    for (WireJunction junction : carried) {
+                        junction.setLayoutX(junction.getLayoutX() + changeX * grid.getSizeX());
+                        junction.setLayoutY(junction.getLayoutY() + changeY * grid.getSizeY());
+                    }
+                } finally {
+                    sheet.setGroupMoveCarried(Collections.emptySet());
                 }
+            } else {
+                moveTo(gridX, gridY);
             }
-
-            moveTo(gridX, gridY);
 
             gridPosX = gridX;
             gridPosY = gridY;
@@ -121,6 +145,88 @@ public abstract class Movable extends HighlightGroup {
             if (node instanceof WireJunction) WireJunction.markDirty((WireJunction) node);
         }
         WireJunction.processNow();
+    }
+
+    /**
+     * Spájače, ktoré sa pri hromadnom presune presúvajú PEVNE spolu so skupinou súčiastok:
+     * všetky dosiahnuteľné z pinov presúvaných súčiastok cez vodiče a spájače, ktoré nie
+     * sú zakotvené (ich cesta sa nikde nekončí na pine nepresúvanej súčiastky). Takýto
+     * spájač patrí celým do presúvanej siete a musí sa posunúť o plný posun - kaskáda
+     * vodičov ho posúva len kolmo a pri viacerých vodičoch by sa posunul viackrát.
+     */
+    private static Set<WireJunction> collectCarriedJunctions(SchematicSheet sheet,
+                                                             List<GateSymbol> movedGates) {
+        if (movedGates == null || movedGates.isEmpty()) return Collections.emptySet();
+        Set<GateSymbol> moved = new HashSet<>(movedGates);
+        Set<WireJunction> anchored = collectAnchoredJunctions(sheet, moved);
+
+        Set<WireJunction> carried = new HashSet<>();
+        LinkedList<Wire> queue = new LinkedList<>();
+        Set<Wire> seenWires = new HashSet<>();
+        for (GateSymbol gate : moved) {
+            if (gate.getPins() == null) continue;
+            for (Pin pin : gate.getPins()) {
+                WireEnd end = pin.getWireEnd();
+                if (end == null) continue;
+                Wire wire = end.getWire();
+                if (wire != null && seenWires.add(wire)) queue.add(wire);
+            }
+        }
+        while (!queue.isEmpty()) {
+            Wire wire = queue.poll();
+            for (WireEnd end : wire.getEnds()) {
+                WireJunction junction = end.getJunction();
+                if (junction == null || anchored.contains(junction)
+                        || !carried.add(junction)) continue;
+                for (Wire neighbour : junction.getConnectedWires()) {
+                    if (neighbour != wire && seenWires.add(neighbour)) queue.add(neighbour);
+                }
+            }
+        }
+        return carried;
+    }
+
+    /**
+     * Spájače, z ktorých vedie aspoň jedna cesta cez vodiče k pinu súčiastky mimo
+     * presúvanej skupiny (transitívne). Takýto spájač sa nesmie posúvať pevne so
+     * skupinou - jeho poloha patrí statickej časti schémy.
+     */
+    private static Set<WireJunction> collectAnchoredJunctions(SchematicSheet sheet,
+                                                              Set<GateSymbol> moved) {
+        Set<WireJunction> anchored = new HashSet<>();
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (Node node : new ArrayList<>(sheet.getJunctionsLayer().getChildren())) {
+                if (!(node instanceof WireJunction)) continue;
+                WireJunction junction = (WireJunction) node;
+                if (anchored.contains(junction)) continue;
+                if (isAnchored(junction, moved, anchored)) {
+                    anchored.add(junction);
+                    changed = true;
+                }
+            }
+        }
+        return anchored;
+    }
+
+    /** Je spájač zakotvený cez niektorý z napojených vodičov na nepresúvanú súčiastku? */
+    private static boolean isAnchored(WireJunction junction, Set<GateSymbol> moved,
+                                      Set<WireJunction> anchored) {
+        for (Wire wire : junction.getConnectedWires()) {
+            WireEnd opposite = oppositeEnd(junction, wire);
+            if (opposite.getPin() != null) {
+                if (!moved.contains(opposite.getPin().getOwner())) return true;
+            } else if (opposite.getJunction() != null) {
+                if (anchored.contains(opposite.getJunction())) return true;
+            }
+        }
+        return false;
+    }
+
+    /** Druhý koniec vodiča voči spájaču {@code junction}. */
+    private static WireEnd oppositeEnd(WireJunction junction, Wire wire) {
+        return wire.getEnds()[0].getJunction() == junction ? wire.getEnds()[1] : wire.getEnds()[0];
     }
 
     public Movable(SchematicSheet sheet) {
