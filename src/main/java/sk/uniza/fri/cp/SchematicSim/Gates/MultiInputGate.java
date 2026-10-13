@@ -9,6 +9,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Text;
+import sk.uniza.fri.cp.SchematicSim.ContextMenuHelper;
 import sk.uniza.fri.cp.SchematicSim.Pin.InputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.OutputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
@@ -75,7 +76,7 @@ public abstract class MultiInputGate extends GateSymbol {
 
     private void showContextMenu(MouseEvent event) {
         if (event.getButton() == MouseButton.SECONDARY) {
-            contextMenu.show(this, event.getScreenX(), event.getScreenY());
+            ContextMenuHelper.show(contextMenu, this, event.getScreenX(), event.getScreenY());
             event.consume();
         }
     }

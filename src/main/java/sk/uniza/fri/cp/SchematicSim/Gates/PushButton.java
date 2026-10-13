@@ -18,6 +18,7 @@ import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 import javafx.geometry.VPos;
+import sk.uniza.fri.cp.SchematicSim.ContextMenuHelper;
 import sk.uniza.fri.cp.SchematicSim.Electrical.PinType;
 import sk.uniza.fri.cp.SchematicSim.Pin.InputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.OutputPin;
@@ -160,7 +161,7 @@ public class PushButton extends GateSymbol {
         } else {
             toggleItem.setSelected(toggle);
         }
-        contextMenu.show(plunger, screenX, screenY);
+        ContextMenuHelper.show(contextMenu, plunger, screenX, screenY);
     }
 
     private void showLabelDialog() {

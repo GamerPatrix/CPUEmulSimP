@@ -13,6 +13,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
+import sk.uniza.fri.cp.SchematicSim.ContextMenuHelper;
 import sk.uniza.fri.cp.SchematicSim.Pin.OutputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
@@ -130,7 +131,7 @@ public class Input extends GateSymbol {
             contextMenu.getItems().get(2).setOnAction(e -> placeOutput(Side.TOP));
             contextMenu.getItems().get(3).setOnAction(e -> placeOutput(Side.BOTTOM));
         }
-        contextMenu.show(button, screenX, screenY);
+        ContextMenuHelper.show(contextMenu, button, screenX, screenY);
     }
 
     public void placeOutput(Side side) {

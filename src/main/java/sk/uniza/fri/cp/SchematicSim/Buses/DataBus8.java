@@ -20,6 +20,7 @@ import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 import sk.uniza.fri.cp.Bus.Bus;
+import sk.uniza.fri.cp.SchematicSim.ContextMenuHelper;
 import sk.uniza.fri.cp.SchematicSim.Electrical.PinType;
 import sk.uniza.fri.cp.SchematicSim.Electrical.Potential;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
@@ -432,7 +433,7 @@ public class DataBus8 extends BusSymbol {
             });
         }
         menu.setOnHidden(event -> cancelInProgressWire());
-        menu.show(railPane, screenX, screenY);
+        ContextMenuHelper.show(menu, railPane, screenX, screenY);
     }
 
     /**
@@ -442,7 +443,7 @@ public class DataBus8 extends BusSymbol {
         ContextMenu menu = ensureDeleteMenu();
         deleteMenuItem.setOnAction(event -> onDelete.run());
         menu.setOnHidden(event -> cancelInProgressWire());
-        menu.show(railPane, screenX, screenY);
+        ContextMenuHelper.show(menu, railPane, screenX, screenY);
     }
 
     private ContextMenu ensureDeleteMenu() {

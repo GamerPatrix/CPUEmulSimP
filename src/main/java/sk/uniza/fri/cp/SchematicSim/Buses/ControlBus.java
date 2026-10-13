@@ -19,6 +19,7 @@ import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
+import sk.uniza.fri.cp.SchematicSim.ContextMenuHelper;
 import sk.uniza.fri.cp.SchematicSim.Electrical.Potential;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
@@ -430,7 +431,7 @@ public class ControlBus extends BusSymbol {
             });
         }
         menu.setOnHidden(event -> cancelInProgressWire());
-        menu.show(railPane, screenX, screenY);
+        ContextMenuHelper.show(menu, railPane, screenX, screenY);
     }
 
     /**
@@ -440,7 +441,7 @@ public class ControlBus extends BusSymbol {
         ContextMenu menu = ensureDeleteMenu();
         deleteMenuItem.setOnAction(event -> onDelete.run());
         menu.setOnHidden(event -> cancelInProgressWire());
-        menu.show(railPane, screenX, screenY);
+        ContextMenuHelper.show(menu, railPane, screenX, screenY);
     }
 
     private ContextMenu ensureDeleteMenu() {

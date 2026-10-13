@@ -20,6 +20,7 @@ import javafx.scene.shape.Rectangle;
 import javafx.scene.shape.Shape;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
+import sk.uniza.fri.cp.SchematicSim.ContextMenuHelper;
 import sk.uniza.fri.cp.SchematicSim.Pin.InputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
@@ -142,7 +143,7 @@ public class SevenSegmentDisplay extends GateSymbol {
                 }
             }
             if (!found) colorGroup.selectToggle(null);
-            contextMenu.show(this, event.getScreenX(), event.getScreenY());
+            ContextMenuHelper.show(contextMenu, this, event.getScreenX(), event.getScreenY());
             event.consume();
         }
     }

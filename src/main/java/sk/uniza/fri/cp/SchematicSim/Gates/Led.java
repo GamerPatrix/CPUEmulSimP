@@ -14,6 +14,7 @@ import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.text.Text;
+import sk.uniza.fri.cp.SchematicSim.ContextMenuHelper;
 import sk.uniza.fri.cp.SchematicSim.Pin.InputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
@@ -143,7 +144,7 @@ public class Led extends GateSymbol {
 
             contextMenu = new ContextMenu(placement, new SeparatorMenuItem(), colorMenu);
         }
-        contextMenu.show(light, screenX, screenY);
+        ContextMenuHelper.show(contextMenu, light, screenX, screenY);
     }
 
     private RadioMenuItem placementItem(String label, Side side, ToggleGroup group) {

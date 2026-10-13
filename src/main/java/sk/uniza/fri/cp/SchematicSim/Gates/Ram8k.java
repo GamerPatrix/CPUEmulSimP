@@ -12,6 +12,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
+import sk.uniza.fri.cp.SchematicSim.ContextMenuHelper;
 import sk.uniza.fri.cp.SchematicSim.Pin.InputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
@@ -87,7 +88,7 @@ public class Ram8k extends GateSymbol {
      */
     private void showContextMenu(MouseEvent event) {
         if (event.getButton() == MouseButton.SECONDARY) {
-            contextMenu.show(this, event.getScreenX(), event.getScreenY());
+            ContextMenuHelper.show(contextMenu, this, event.getScreenX(), event.getScreenY());
             event.consume();
         }
     }
