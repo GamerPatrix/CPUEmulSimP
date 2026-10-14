@@ -661,6 +661,14 @@ public class DataBus8 extends BusSymbol {
         boolean writeActive = (ctrl & 0x140) != 0x140;
         boolean readActive = (ctrl & 0xB0) != 0xB0;
 
+        // Mimo čítania si dáta vezmeme priamo zo zbernice. setDataBus() s rovnakou hodnotou
+        // (napr. 0x00 po prečítaní vektora prerušenia) nevyvolá zmenu vlastnosti, takže by
+        // v this.data ostala zastaraná hodnota a na vývody by sme hnali nesprávne bity
+        // (napr. REG1 by si namiesto nuly zapamätal 0x0F a zablokoval by detekciu kláves).
+        if (!readActive) {
+            this.data = Byte.toUnsignedInt(getBus().getDataBus());
+        }
+
         if (writeActive && !write) {
             // začiatok zápisu - premietneme dáta zo zbernice na vývody
             write = true;
@@ -692,18 +700,38 @@ public class DataBus8 extends BusSymbol {
     }
 
     private void readPinsIntoBus() {
-        int result = this.data;
+        // Vychádzame z aktuálnej hodnoty zbernice a meníme IBA bity, ktoré obvod
+        // jednoznačne budí (silný vývod HIGH/LOW). Plávajúci (NC) bit sa NESMIE
+        // nahradiť náhodnou hodnotou z Potential.getFloatingValue() - na zbernici by
+        // vzniklo smetie (napr. nesprávny vektor prerušenia). Viacero vývodov DataBus8
+        // na tej istej logickej zbernici sa takto zlúči bez vzájomného prepísania.
+        int bus = Byte.toUnsignedInt(getBus().getDataBus());
+        boolean changed = false;
         for (TapPoint tap : taps) {
-            if (isHigh(tap.pin)) {
-                result |= (1 << tap.bit);
-            } else if (isLow(tap.pin)) {
-                result &= ~(1 << tap.bit);
+            Potential.Value value = resolvedPotentialValue(tap.pin);
+            if (value == Potential.Value.HIGH) {
+                if ((bus & (1 << tap.bit)) == 0) {
+                    bus |= (1 << tap.bit);
+                    changed = true;
+                }
+            } else if (value == Potential.Value.LOW) {
+                if ((bus & (1 << tap.bit)) != 0) {
+                    bus &= ~(1 << tap.bit);
+                    changed = true;
+                }
             }
         }
-        if (result != this.data) {
-            this.data = result;
-            getBus().setDataBus((byte) result);
+        if (changed) {
+            this.data = bus;
+            getBus().setDataBus((byte) bus);
         }
+    }
+
+    /** Rozlíšená úroveň potenciálu na vývode; NC znamená plávajúci (nikto nebudi) vývod. */
+    private static Potential.Value resolvedPotentialValue(Pin pin) {
+        if (pin == null || !pin.isConnected()) return Potential.Value.NC;
+        Potential potential = pin.getPotential();
+        return potential != null ? potential.getValue() : Potential.Value.NC;
     }
 
     @Override
