@@ -71,6 +71,7 @@ public class SchematicController {
     private SchematicSheet sheet;
     private ItemPicker itemPicker;
     private BorderPane root;
+    private SplitPane editableArea;
 
     private File currentFile;
 
@@ -104,8 +105,7 @@ public class SchematicController {
         //rozloženie okna
         SplitPane editableArea = new SplitPane(this.itemPicker, this.sheet);
         editableArea.setDividerPositions(0.13);
-        WindowSettings.restoreDivider("schematic.palette", editableArea);
-        WindowSettings.trackDivider("schematic.palette", editableArea);
+        this.editableArea = editableArea;
 
         this.root = new BorderPane();
         this.root.setTop(buildToolbar());
@@ -152,6 +152,21 @@ public class SchematicController {
 
     public SchematicSheet getSheet() {
         return this.sheet;
+    }
+
+    /**
+     * Vypíše na konzolu pomery rozloženia častí okna simulátora pri jeho otvorení.
+     */
+    public void printLayoutRatios() {
+        WindowSettings.printDividerRatios("Simulátor - paleta | plocha", this.editableArea);
+    }
+
+    /**
+     * Obnoví zapamätané pozície oddeľovačov okna simulátora. Volá sa až po
+     * zobrazení okna (z {@code setOnShown}), keď má panel konečný rozmer.
+     */
+    public void applySavedDividers() {
+        WindowSettings.applyDivider("schematic.palette", this.editableArea);
     }
 
     /**

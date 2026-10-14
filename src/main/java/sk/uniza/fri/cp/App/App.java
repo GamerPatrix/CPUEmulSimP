@@ -1,6 +1,7 @@
 package sk.uniza.fri.cp.App;
 
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.event.EventHandler;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -85,6 +86,13 @@ public class App extends Application {
         primaryStage.setTitle(WINDOW_TITLE);
         primaryStage.getIcons().add(new Image(getClass().getResourceAsStream("/icons/cpu_icon.png")));
         WindowSettings.restore("cpu", primaryStage, CPU_WINDOW_WIDTH, CPU_WINDOW_HEIGHT);
+        //obnovenie zapamätaného rozloženia panelov a výpis pomerov rozloženia okna CPU
+        //(až po zobrazení okna, keď majú panely konečný rozmer - inak by sa rozloženie posúvalo)
+        primaryStage.setOnShown(event -> Platform.runLater(() -> {
+            CPUController cpuController = CpuLayoutLoader.getController();
+            cpuController.applySavedDividers();
+            cpuController.printLayoutRatios();
+        }));
         primaryStage.show();
         primStage = primaryStage;
         WindowSettings.track("cpu", primaryStage);
@@ -99,6 +107,12 @@ public class App extends Application {
         schematicStage.setScene(schematicController.getScene());
         WindowSettings.restore("schematic", schematicStage, 1280, 850);
         WindowSettings.track("schematic", schematicStage);
+        //obnovenie zapamätaného rozloženia panelov a výpis pomerov rozloženia okna simulátora
+        //(až po zobrazení okna, keď má panel konečný rozmer - inak by sa rozloženie posúvalo)
+        schematicStage.setOnShown(event -> Platform.runLater(() -> {
+            schematicController.applySavedDividers();
+            schematicController.printLayoutRatios();
+        }));
 
         // klávesové skratky a mazanie objektov
         schematicController.registerKeyboardHandlers();

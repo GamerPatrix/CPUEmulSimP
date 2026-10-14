@@ -330,11 +330,14 @@ public class CPUController implements Initializable {
         btnSimulator.setDisable(true);
 
         //inicializacia pozicie oddelovacov v SplitPaneloch a obnovenie zapamätaného rozloženia
-        WindowSettings.restoreDivider("cpu.horiz", splitPaneHoriz);
-        defSplitPaneHorizDividerPositions = splitPaneHoriz.getDividerPositions();
+        //(pozície sa aplikujú až po zobrazení okna v applySavedDividers(), inak by sa posunuli)
+        double[] savedHorizDividerPositions = WindowSettings.getSavedDividerPositions("cpu.horiz", splitPaneHoriz);
+        defSplitPaneHorizDividerPositions = savedHorizDividerPositions != null
+                ? savedHorizDividerPositions
+                : splitPaneHoriz.getDividerPositions();
 
         lastConsoleDividerPos = WindowSettings.getDouble("cpu.consoleLastPos", 0.71);
-        if (!WindowSettings.restoreDivider("cpu.console", splitPaneVert)) {
+        if (WindowSettings.getSavedDividerPositions("cpu.console", splitPaneVert) == null) {
             splitPaneVert.getDividers().get(0).setPosition(0.71);
         }
         titPaneConsole.setExpanded(WindowSettings.getBoolean("cpu.consoleExpanded", true));
@@ -353,8 +356,6 @@ public class CPUController implements Initializable {
                 }
             }
         });
-        WindowSettings.trackDivider("cpu.horiz", splitPaneHoriz);
-        WindowSettings.trackDivider("cpu.console", splitPaneVert);
 
         //Akceleratory
         Platform.runLater(()->{
@@ -517,6 +518,23 @@ public class CPUController implements Initializable {
     public void setSchematicStage(Stage stageToShow) {
         this.schematicStage = stageToShow;
         this.btnSimulator.setDisable(false);
+    }
+
+    /**
+     * Vypíše na konzolu pomery rozloženia častí okna CPU pri jeho otvorení.
+     */
+    public void printLayoutRatios() {
+        WindowSettings.printDividerRatios("CPU - obsah | konzola", splitPaneVert);
+        WindowSettings.printDividerRatios("CPU - registre | kód | pamäť", splitPaneHoriz);
+    }
+
+    /**
+     * Obnoví zapamätané pozície oddeľovačov okna CPU. Volá sa až po zobrazení
+     * okna (z {@code setOnShown}), keď majú panely konečný rozmer.
+     */
+    public void applySavedDividers() {
+        WindowSettings.applyDivider("cpu.horiz", splitPaneHoriz);
+        WindowSettings.applyDivider("cpu.console", splitPaneVert);
     }
 
     /**
