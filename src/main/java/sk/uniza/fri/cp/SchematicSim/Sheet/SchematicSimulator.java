@@ -11,6 +11,7 @@ import sk.uniza.fri.cp.Bus.Bus;
 import sk.uniza.fri.cp.SchematicSim.Buses.BusSymbol;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -69,6 +70,10 @@ public class SchematicSimulator {
                         // inak sa sukciastky vedia prepočítat v nahodnom poradi a na zbernici
                         // sa objavia prechodne (glitchove) stavy
                         LinkedHashSet<GateSymbol> gatesToUpdate = new LinkedHashSet<>();
+                        // jedna vlna (delta cyklus): vsetky udalosti, ktore su prave vo fronte.
+                        // Hradla z vlny sa vyhodnotia RAZ; udalosti vytvorene simulaciou padnu
+                        // do frontu az po odobrati vlny (drainTo) a tvoria vlnu nasledujucu.
+                        List<SheetEvent> wave = new ArrayList<>();
                         SheetEvent event;
                         long lastActivityTime = System.currentTimeMillis();
                         boolean steadyState = false;
@@ -116,6 +121,12 @@ public class SchematicSimulator {
                                     }
                                 }
 
+                                // zvyšok aktuálnej vlny (delta cyklus) odober hneď - udalosti
+                                // vytvorené simuláciou až po tomto bode tvoria vlnu nasledujúcu
+                                wave.clear();
+                                wave.add(event);
+                                eventsQueue.drainTo(wave);
+
 if (steadyState) {
                                 // podujatie sa našlo - dáta sa menia, CPU nesmie čítať
                                 // a hlavne: zneplatnime príznak idle, aby CPU neakceptovalo
@@ -124,9 +135,11 @@ if (steadyState) {
                                 steadyState = false;
                             }
 
-                                event.process(gatesToUpdate);
-                                gatesToUpdate.forEach(GateSymbol::simulate);
+                                // najprv prepíš siete z celej vlny (process), potom vyhodnoť
+                                // každé hradlo vlny RAZ - bez viacnásobného prepočtu v rámci vlny
                                 gatesToUpdate.clear();
+                                for (SheetEvent e : wave) e.process(gatesToUpdate);
+                                gatesToUpdate.forEach(GateSymbol::simulate);
                                 lastActivityTime = System.currentTimeMillis();
 
                                 // okamžité ohlásenie ustálenia - CPU nemusí čakať na ďalší idle poll.
