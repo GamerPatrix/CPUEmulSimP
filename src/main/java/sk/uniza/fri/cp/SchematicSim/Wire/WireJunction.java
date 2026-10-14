@@ -369,6 +369,13 @@ public class WireJunction extends Joint implements Connectable {
         // odstránil; keepEnd by sa potom pripojil na už zničený (ghost) spájač a vodiče
         // by nepatrili do jednej siete.
         keepEnd.disconnect();
+        // Vzdialenejší koniec drop vodiča treba uvoľniť ešte PRED pripojením keep konca.
+        // Ak je cieľom pin, connect() na ešte obsadený pin zlyhá a keepEnd ostane
+        // nepripojený; po zrušení drop vodiča by tak k pinu neviedol žiadny vodič
+        // (prejaví sa napr. zmiznutím vodiča k LED pri zrovnaní Z-vodiča do priamky).
+        // Odpojenie spájača len označí na prepočet (markDirty), reconcile sa spustí až
+        // v drop.delete() - vtedy už je keep koniec na cieľ napojený.
+        dropOther.disconnect();
         destroy(junction);
         if (target != null) {
             keepEnd.connect(target);
