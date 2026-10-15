@@ -180,8 +180,8 @@ public class ControlBus extends BusSymbol {
         resizeTopHandle.addEventFilter(MouseEvent.MOUSE_RELEASED, this::handleResizeReleased);
 
         Text title = new Text(getBusLabel());
-        title.setLayoutX(railCenterX - cell * 0.55);
-        title.setLayoutY(-cell * 0.15);
+        title.setLayoutX(railCenterX - cell * 0.4);
+        title.setLayoutY(cell * 0.15);
         title.setFont(Font.font(cell * 0.6));
         title.setFill(RAIL_COLOR);
         title.setMouseTransparent(true);
@@ -412,7 +412,7 @@ public class ControlBus extends BusSymbol {
         line.setHeight(railHeight(cell));
         resizeHandle.setCenterY(rows * cell - cell / 2.0);
         resizeTopHandle.setCenterY(topRow * cell + cell / 2.0);
-        title.setLayoutY(topRow * cell - cell * 0.15);
+        title.setLayoutY(topRow * cell + cell * 0.15);
     }
 
     // === menu výberu signálu ===

@@ -197,6 +197,28 @@ public class MatrixKeyboard extends GateSymbol {
             }
         }
 
+        // označenie riadkov: vľavo od klávesnice, pod pripojnými bodmi, zdola hore 1..4
+        // označenie stĺpcov: nad klávesnicou, vľavo od pripojného bodu, zľava doprava 1..4
+        Font axisFont = Font.font(cell * 0.7);
+        for (int row = 0; row < ROWS; row++) {
+            Text rowLabel = new Text(Integer.toString(ROWS - row));
+            rowLabel.setFont(axisFont);
+            rowLabel.setFill(Color.BLACK);
+            rowLabel.setMouseTransparent(true);
+            rowLabel.setLayoutX(cell * 0.4);
+            rowLabel.setLayoutY((2 + row * KEY_GRID) * cell + cell * 0.75);
+            pane.getChildren().add(rowLabel);
+        }
+        for (int col = 0; col < COLS; col++) {
+            Text colLabel = new Text(Integer.toString(col + 1));
+            colLabel.setFont(axisFont);
+            colLabel.setFill(Color.BLACK);
+            colLabel.setMouseTransparent(true);
+            colLabel.setLayoutX((2 + col * KEY_GRID) * cell - cell * 0.55);
+            colLabel.setLayoutY(cell * 0.65);
+            pane.getChildren().add(colLabel);
+        }
+
         return pane;
     }
 

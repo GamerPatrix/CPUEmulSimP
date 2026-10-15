@@ -132,7 +132,7 @@ public class SevenSegmentDisplay extends GateSymbol {
 
     private void showContextMenu(MouseEvent event) {
         if (event.getButton() == MouseButton.SECONDARY) {
-            if (getSheet() == null || !getSheet().isEditingEnabled()) return;
+            // povolené aj počas simulácie - mení sa iba farba segmentov, nie zapojenie
             // označiť aktuálne zvolenú farbu (alebo zrušiť označenie pri vlastnej farbe)
             boolean found = false;
             for (Toggle toggle : colorGroup.getToggles()) {

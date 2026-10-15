@@ -95,6 +95,8 @@ public class Register8 extends GateSymbol {
      */
     private void showContextMenu(MouseEvent event) {
         if (event.getButton() == MouseButton.SECONDARY) {
+            // počas simulácie sa D-Q prehadzovať nesmie - mení sa tým zapojenie
+            if (getSheet() == null || !getSheet().isEditingEnabled()) return;
             ContextMenuHelper.show(contextMenu, this, event.getScreenX(), event.getScreenY());
             event.consume();
         }

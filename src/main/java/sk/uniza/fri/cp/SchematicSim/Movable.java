@@ -122,6 +122,7 @@ public abstract class Movable extends HighlightGroup {
             gridPosY = gridY;
             dragLastGridX = gridX;
             dragLastGridY = gridY;
+            sheet.markChanged();
         }
 
         event.consume();
