@@ -440,11 +440,18 @@ public class SchematicSheet extends ScrollPane {
                         Math.round(sheetXY.getX() / gridMin) * gridMin,
                         Math.round(sheetXY.getY() / gridMin) * gridMin);
 
-                // 1) spájač (viditeľný, alebo koniec vodiča na spájači)
-                WireJunction junctionTarget = findJunctionTarget(picked);
+                double tolerance = WIRE_DROP_TOLERANCE;
+
+                // 1) najbližší spájač (viditeľný, alebo neviditeľný zlom/koleno) v okolí.
+                // Prednosť má geometrické hľadanie podľa vzdialenosti - pick na veľké
+                // neviditeľné boxy koncov/spájačov mohol vybrať spájač o celú mriežku ďalej.
+                WireJunction junctionTarget = WireJunction.findNear(this, sheetXY, tolerance);
                 if (junctionTarget == null) {
-                    // neviditeľný zlom myšou nebuchne - hľadá sa geometricky v okolí
-                    junctionTarget = WireJunction.findNear(this, sheetXY, gridMin / 2.0);
+                    // pick na spájač akceptuj len ak je naozaj v tolerancii
+                    WireJunction pickedJunction = findJunctionTarget(picked);
+                    if (pickedJunction != null && pickedJunction.getConnectionPoint().distance(sheetXY) <= tolerance) {
+                        junctionTarget = pickedJunction;
+                    }
                 }
                 if (junctionTarget != null) {
                     if (inProgress != null && junctionTarget == inProgress.getStartJunction()) {
@@ -464,7 +471,7 @@ public class SchematicSheet extends ScrollPane {
                 }
 
                 // 2) voľný koniec iného vodiča v okolí = spoločný spájač
-                WireJunction shared = findFreeEndNear(own, snapPoint, gridMin / 2.0);
+                WireJunction shared = findFreeEndNear(own, snapPoint, tolerance);
                 if (shared != null) {
                     freeEnd.connect(shared);
                     finishWireDrop(inProgress);
@@ -480,35 +487,24 @@ public class SchematicSheet extends ScrollPane {
                     return;
                 }
 
-                // 3) pustenie priamo na vodič = rozdelenie v mieste pustenia
-                Wire targetWire = findAncestor(picked, Wire.class);
-                if (targetWire != null) {
-                    if (targetWire == own) {
-                        // pustenie na vlastný vodič = ukončenie bez pripojenia
-                        Pin.finishInProgressWire();
-                        WireEnd.finishGrab();
-                        return;
-                    }
-                    WireJunction junction = targetWire.splitAtPoint(sheetXY);
+                // 3) pustenie na vlastný (rozpracovaný) vodič = ukončenie bez pripojenia
+                if (findAncestor(picked, Wire.class) == own) {
+                    Pin.finishInProgressWire();
+                    WireEnd.finishGrab();
+                    return;
+                }
+
+                // 4) najbližší iný vodič v tolerancii = rozdelenie v mieste pustenia a
+                // pripojenie. Vodič sa vyberá PODĽA VZDIALENOSTI (nie podľa pick), aby
+                // veľké klikacie boxy nevybrali vodič o celú mriežku ďalej.
+                Wire nearest = findNearestWire(own, sheetXY);
+                if (nearest != null) {
+                    WireJunction junction = nearest.splitAtPoint(sheetXY);
                     if (junction != null) {
                         freeEnd.connect(junction);
                         finishWireDrop(inProgress);
                         event.consume();
                         return;
-                    }
-                }
-
-                // 4) pustenie na prázdnej ploche v okolí neďalekého vodiča
-                if (isOnWireDropSurface(picked)) {
-                    Wire nearest = findNearestWire(own, sheetXY);
-                    if (nearest != null) {
-                        WireJunction junction = nearest.splitAtPoint(sheetXY);
-                        if (junction != null) {
-                            freeEnd.connect(junction);
-                            finishWireDrop(inProgress);
-                            event.consume();
-                            return;
-                        }
                     }
                 }
                 // nič - zdrojový handler ťah dokončí alebo zruší
