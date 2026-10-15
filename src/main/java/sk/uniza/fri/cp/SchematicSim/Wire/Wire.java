@@ -890,17 +890,23 @@ WireEnd other = otherEnd(end);
             event.consume();
         });
 
-        this.addEventHandler(MouseEvent.MOUSE_ENTERED_TARGET, event -> {
-            if (!this.isSelected()) applyHighlight(0.7);
+    }
+
+    /**
+     * Zvýraznenie vodiča pri prechode kurzora (hover). Riadi ho plocha na základe
+     * vzdialenosti kurzora k najbližšiemu vodiču (nie pick), aby veľké neviditeľné
+     * klikacie plochy koncov/spájačov nepreberali fokus na susedný vodič. Zvýraznenie
+     * (čiarkovaný prekryv) sa nastaví len na nevybranom vodiči; tieň sa aplikuje vždy.
+     */
+    public void setHovered(boolean hovered) {
+        if (!this.isSelected()) applyHighlight(hovered ? 0.7 : 0);
+        if (hovered) {
             Color brighter = this.color.brighter();
             this.setStyle("-fx-effect: dropshadow(gaussian, rgb("
                     + brighter.getRed() * 255 + "," + brighter.getGreen() * 255 + "," + brighter.getBlue() * 255 + "), 1, 1.0, 0, 0)");
-        });
-
-        this.addEventHandler(MouseEvent.MOUSE_EXITED_TARGET, event -> {
-            if (!this.isSelected()) applyHighlight(0);
+        } else {
             this.setStyle("-fx-effect: none");
-        });
+        }
     }
 
     /**

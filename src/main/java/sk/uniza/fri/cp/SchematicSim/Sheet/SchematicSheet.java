@@ -143,6 +143,9 @@ public class SchematicSheet extends ScrollPane {
     private boolean panAllowed = false;
     private final Group contentGroup;
 
+    /** Vodič práve zvýraznený pri prechode kurzora (hover), null ak žiadny. */
+    private Wire hoveredWire;
+
     private final EventHandler<MouseDragEvent> onMouseDragEnteredHandle = event -> {
         if (!isEditingEnabled()) return;
         hasChanged = true;
@@ -357,6 +360,7 @@ public class SchematicSheet extends ScrollPane {
         });
 
         setupWireToWireHandler();
+        setupWireHover();
 
         // kotva pre prilepenie (Ctrl+V) = posledná poloha myši na ploche
         scrollContent.setOnMouseMoved(event -> {
@@ -579,6 +583,33 @@ public class SchematicSheet extends ScrollPane {
         }
         if (bestWire == null || bestDist > tolerance) return null;
         return bestWire;
+    }
+
+    /**
+     * Zvýraznenie vodiča pod kurzorom. Fokus sa určuje podľa vzdialenosti kurzora k
+     * najbližšiemu vodiču (nie podľa pick), aby veľké neviditeľné klikacie plochy
+     * koncov a spájačov nepreberali fokus na susedný vodič (napr. v blízkosti kolena
+     * L/Z tvaru). Nad súčiastkou sa zvýraznenie zruší (vodič je nimi prekrytý).
+     */
+    private void setupWireHover() {
+        this.contentGroup.addEventFilter(MouseEvent.MOUSE_MOVED, event -> {
+            Node picked = event.getPickResult() == null ? null : event.getPickResult().getIntersectedNode();
+            if (findAncestor(picked, GateSymbol.class) != null) {
+                updateWireHover(null);
+                return;
+            }
+            updateWireHover(sceneToSheet(event.getSceneX(), event.getSceneY()));
+        });
+        this.contentGroup.addEventFilter(MouseEvent.MOUSE_PRESSED, event -> updateWireHover(null));
+        this.contentGroup.addEventFilter(MouseEvent.MOUSE_EXITED, event -> updateWireHover(null));
+    }
+
+    private void updateWireHover(Point2D sheetXY) {
+        Wire nearest = sheetXY == null ? null : findNearestWire(null, sheetXY);
+        if (nearest == this.hoveredWire) return;
+        if (this.hoveredWire != null) this.hoveredWire.setHovered(false);
+        this.hoveredWire = nearest;
+        if (nearest != null) nearest.setHovered(true);
     }
 
     private void finishWireDrop(Wire inProgress) {
