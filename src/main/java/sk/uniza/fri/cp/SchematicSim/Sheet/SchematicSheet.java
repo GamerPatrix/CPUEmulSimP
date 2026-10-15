@@ -617,15 +617,14 @@ public class SchematicSheet extends ScrollPane {
     }
 
     /**
-     * Presunie spájač odbočky na miesto, kde sa odbočka stretáva s pôvodným vodičom
-     * KOLMO. Ak sa ťah nového vodiča začal v bode ležiacom na priamom vodiči, začiatok
-     * ťahu tam vytvoril spájač. Ak prvé rameno nového vodiča ide po pôvodnej priamke
-     * (kolineárne) a až druhé rameno odbočí kolmo, spájač na mieste začiatku ostáva
-     * "neviditeľne" sedieť na priamke bez odbočky. Správne miesto je roh L-tvaru - kolmý
-     * náprotivok voľného konca na priamke. Pôvodná priamka sa v rohu rozdelí a všetko sa
-     * doň prepája; na priamke tak zostanú len dve priame časti (napr. AX, XC) a kolmá
-     * odbočka (napr. XD). Ak je celý ťah kolineárny s pôvodným vodičom a siaha za koleno
-     * L-tvaru, spájač sa presunie priamo do kolena a prekrývajúca sa časť sa zruší.
+     * Presunie spájač odbočky na miesto, kde sa odbočka stretáva s pôvodným vodičom.
+     * Ak sa ťah nového vodiča začal v bode ležiacom na priamom vodiči, začiatok ťahu
+     * tam vytvoril spájač a spájač zostane "neviditeľne" sedieť na priamke. Ak sú na
+     * spájači tri kolineárne vodiče (jeden ide jedným smerom, dva opačným), spájač sa
+     * presúva v smere tých dvoch až po miesto, kde sa ROZCHÁDZAJÚ: buď koleno L-tvaru
+     * pôvodného vodiča (polovica tu končí - ťah siaha za koleno, hoci aj L-tvarom),
+     * alebo zlom odbočky (kolmý náprotivok voľného konca). Pôvodná priamka sa v tom
+     * bode rozdelí a všetko sa doň prepája.
      *
      * @return true, ak sa odbočka presunula (spájač začiatku zanikol)
      */
@@ -696,62 +695,60 @@ public class SchematicSheet extends ScrollPane {
         boolean towardFirst = (v1x * sx + v1y * sy) > 0;
         Wire toward = towardFirst ? half1 : half2;
         Wire other = towardFirst ? half2 : half1;
-
-        // Voľný koniec leží NA priamke - ťah je kolineárny s pôvodným vodičom (rovný
-        // vodič cez koleno L). Spájač začiatku sa presunie do kolena L - na spájač
-        // konca polovice v smere ťahu. Prekrývajúca sa časť spájač..koleno sa zruší,
-        // druhá polovica sa natiahne na koleno a odbočka pokračuje z kolena po miesto
-        // pustenia; zostanú tak tri vodiče: obe ramená L a odbočka od kolena.
-        if (corner.distance(free) < grid / 2.0) {
-            WireEnd towardNear = towardFirst ? near1 : near2;
-            WireEnd towardFar = toward.getEnds()[0] == towardNear ? toward.getEnds()[1] : toward.getEnds()[0];
-            WireJunction knee = towardFar.getJunction();
-            if (knee == null || knee.isRemoved()) return false;
-            // ťah musí siahať aspoň pol mriežky za koleno - inak by po presune vznikli
-            // dva totožné vodiče koleno..pustenie (alebo nulový vodič)
-            if (corner.distance(b) < knee.getConnectionPoint().distance(b) + grid / 2.0) return false;
-
-            WireEnd otherNear = endAt(other, anchor);
-            WireEnd branchNear = endAt(branch, anchor);
-            if (otherNear == null || branchNear == null) return false;
-
-            otherNear.connect(knee);  // druhá polovica priamky sa natiahne na koleno
-            branchNear.connect(knee); // odbočka: koleno -> kam sa ťahalo
-            toward.delete();          // prekrývajúca časť spájač..koleno je nadbytočná
-            WireJunction.processNow();
-            return true;
-        }
-
-        // rozdelenie priamky v rohu
-        WireJunction cornerJunction = toward.splitAtPoint(corner);
-        if (cornerJunction == null || cornerJunction.isRemoved()) return false;
+        WireEnd towardNear = towardFirst ? near1 : near2;
+        WireEnd towardFar = toward.getEnds()[0] == towardNear ? toward.getEnds()[1] : toward.getEnds()[0];
 
         WireEnd otherNear = endAt(other, anchor);
         WireEnd branchNear = endAt(branch, anchor);
         if (otherNear == null || branchNear == null) return false;
 
-        otherNear.connect(cornerJunction);  // druhá polovica priamky -> roh (napr. AX)
-        branchNear.connect(cornerJunction); // odbočka: roh -> kam sa ťahalo (napr. XD)
+        // Dva vodiče v smere ťahu (polovica + prvé rameno odbočky) sa rozchádzajú na
+        // bližšom z dvoch bodov: kolene pôvodného vodiča (polovica tu končí) alebo
+        // zlome odbočky (prvé rameno sa tu stáča kolmo - kolmý náprotivok voľného
+        // konca). Tam sa spájač presunie; prekrývajúca sa časť sa zruší.
+        double runBranch = corner.distance(b);                      // zlom odbočky
+        double runHalf = towardFar.getConnectionPoint().distance(b); // koniec polovice
+        boolean freeOnLine = corner.distance(free) < grid / 2.0;     // ťah je rovný
 
-        // rozdelenie priamky ponechalo v pôvodnom vodiči vzdialenejšiu časť (roh..C)
-        // a vytvorilo nový vodič roh..B; tento slepý presah sa zruší. Kratšia/nadbytočná
-        // časť spájajúca roh s pôvodným spájačom je tá, ktorá má koniec na spájači B.
-        for (Wire stub : new ArrayList<>(cornerJunction.getConnectedWires())) {
-            if (stub == other || stub == branch) continue;
-            boolean atAnchor = false;
-            for (WireEnd end : stub.getEnds()) {
-                if (end.getJunction() == anchor) {
-                    atAnchor = true;
+        if (!freeOnLine && runBranch + COLLINEAR_EPS < runHalf) {
+            // odbočka sa stáča skôr, než polovica končí - polovica sa v zlome rozdelí
+            WireJunction cornerJunction = toward.splitAtPoint(corner);
+            if (cornerJunction == null || cornerJunction.isRemoved()) return false;
+
+            otherNear.connect(cornerJunction);  // druhá polovica priamky -> roh (napr. AX)
+            branchNear.connect(cornerJunction); // odbočka: roh -> kam sa ťahalo (napr. XD)
+
+            // rozdelenie priamky ponechalo v pôvodnom vodiči vzdialenejšiu časť (roh..C)
+            // a vytvorilo nový vodič roh..B; tento slepý presah sa zruší. Kratšia/nadbytočná
+            // časť spájajúca roh s pôvodným spájačom je tá, ktorá má koniec na spájači B.
+            for (Wire stub : new ArrayList<>(cornerJunction.getConnectedWires())) {
+                if (stub == other || stub == branch) continue;
+                boolean atAnchor = false;
+                for (WireEnd end : stub.getEnds()) {
+                    if (end.getJunction() == anchor) {
+                        atAnchor = true;
+                        break;
+                    }
+                }
+                if (atAnchor) {
+                    stub.delete(); // uvoľní spájač B, ktorý tým zanikne
                     break;
                 }
             }
-            if (atAnchor) {
-                stub.delete(); // uvoľní spájač B, ktorý tým zanikne
-                break;
-            }
+        } else {
+            // polovica končí skôr, než sa odbočka stáča (alebo je ťah rovný a siaha za
+            // koleno) - spájač sa presunie na koniec polovice, na koleno L-tvaru
+            WireJunction knee = towardFar.getJunction();
+            if (knee == null || knee.isRemoved()) return false;
+            // odbočka musí za koleno siahať aspoň pol mriežky - inak by po presune
+            // vznikli dva totožné vodiče (alebo nulový vodič)
+            if (runBranch < runHalf + grid / 2.0) return false;
+
+            otherNear.connect(knee);  // druhá polovica priamky sa natiahne na koleno
+            branchNear.connect(knee); // odbočka: koleno -> kam sa ťahalo
+            toward.delete();          // prekrývajúca sa časť spájač..koleno je nadbytočná
         }
         WireJunction.processNow();
-
         return true;
     }
 
