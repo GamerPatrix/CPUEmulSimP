@@ -253,8 +253,11 @@ public class SchemeLoader {
                 List<WireEntry> pendingResolve = new ArrayList<>();
                 // zdieľané spájače: konce vodičov v jednom bode sa napoja na rovnaký hub
                 Map<Long, WireJunction> hubByKey = new HashMap<>();
+                // koľko koncov odkazuje na spájač v danom bode - rozhoduje, či bod spájača
+                // treba dodatočne rozdeľovať na prechádzajúcom vodiči (len staré súbory)
+                Map<Long, Integer> junctionRefs = countJunctionRefs(wiresElement);
                 for (Element wireElement : wiresElement.getChildren("Wire")) {
-                    WireEntry entry = loadWire(sheet, wireElement, gatesById, loadedWires, hubByKey);
+                    WireEntry entry = loadWire(sheet, wireElement, gatesById, loadedWires, hubByKey, junctionRefs);
                     if (entry == null) continue;
 
                     if (loadable(entry)) {
@@ -268,8 +271,8 @@ public class SchemeLoader {
                 // vodičom (v praxi sa to nestáva, ale kvôli robustnosti to ošetrujeme)
                 List<WireEntry> stillPending = new ArrayList<>();
                 for (WireEntry entry : pendingResolve) {
-                    resolveJunctionEnd(entry.wire.getEnds()[0], entry.startElement, loadedWires, hubByKey);
-                    resolveJunctionEnd(entry.wire.getEnds()[1], entry.endElement, loadedWires, hubByKey);
+                    resolveJunctionEnd(entry.wire.getEnds()[0], entry.startElement, loadedWires, hubByKey, junctionRefs);
+                    resolveJunctionEnd(entry.wire.getEnds()[1], entry.endElement, loadedWires, hubByKey, junctionRefs);
 
                     if (loadable(entry)) {
                         loadedWires.add(entry.wire);
@@ -319,7 +322,7 @@ public class SchemeLoader {
      */
     private static WireEntry loadWire(SchematicSheet sheet, Element wireElement,
                                       Map<String, GateSymbol> gatesById, List<Wire> loadedWires,
-                                      Map<Long, WireJunction> hubByKey) {
+                                      Map<Long, WireJunction> hubByKey, Map<Long, Integer> junctionRefs) {
         Element startElement = wireElement.getChild("start");
         Element endElement = wireElement.getChild("end");
 
@@ -332,8 +335,8 @@ public class SchemeLoader {
         connectPinEnd(ends[0], startElement, gatesById);
         connectPinEnd(ends[1], endElement, gatesById);
 
-        resolveJunctionEnd(ends[0], startElement, loadedWires, hubByKey);
-        resolveJunctionEnd(ends[1], endElement, loadedWires, hubByKey);
+        resolveJunctionEnd(ends[0], startElement, loadedWires, hubByKey, junctionRefs);
+        resolveJunctionEnd(ends[1], endElement, loadedWires, hubByKey, junctionRefs);
 
         // voľné konce sa obnovia na uloženú pozíciu - vodič so slobodným koncom nezmizne
         positionFreeEnd(ends[0], startElement);
@@ -429,7 +432,7 @@ public class SchemeLoader {
      * @return true ak sa koniec podarilo pripojiť na spájač.
      */
     private static boolean resolveJunctionEnd(WireEnd end, Element endElement, List<Wire> loadedWires,
-                                              Map<Long, WireJunction> hubByKey) {
+                                              Map<Long, WireJunction> hubByKey, Map<Long, Integer> junctionRefs) {
         if (endElement == null || end.isConnected()) return true;
 
         Element junctionElement = endElement.getChild("junction");
@@ -471,14 +474,20 @@ public class SchemeLoader {
         // vzniká len v starých súboroch (kmeň cez bod prechádzal ako zlom). Bod sa smie
         // spojiť LEN keď leží PRESNE na vodiči - ak vodič vedie len v blízkosti bodu,
         // spojenie by skratovalo dve rôzne siete.
-        for (Wire loadedWire : loadedWires) {
-            if (loadedWire == end.getWire()) continue;
-            if (liesOnWire(loadedWire, pos)) {
-                WireJunction junction = loadedWire.splitAtPoint(pos);
-                if (junction != null) {
-                    hubByKey.put(key, junction);
-                    end.connect(junction);
-                    return true;
+        // Rozdeľovať sa smie LEN ak na bod odkazuje jediný koniec vodiča. Ak na bod
+        // odkazujú dva a viac koncov (nový formát), bod je už úplne popísaný týmito
+        // koncami a vodič, ktorý ním len prechádza, sa NESMIE rozdeliť - inak by obnova
+        // snímky (undo/redo) zmenila topológiu (vznikol by duch-spájač).
+        if (junctionRefs.getOrDefault(key, 0) <= 1) {
+            for (Wire loadedWire : loadedWires) {
+                if (loadedWire == end.getWire()) continue;
+                if (liesOnWire(loadedWire, pos)) {
+                    WireJunction junction = loadedWire.splitAtPoint(pos);
+                    if (junction != null) {
+                        hubByKey.put(key, junction);
+                        end.connect(junction);
+                        return true;
+                    }
                 }
             }
         }
@@ -488,6 +497,30 @@ public class SchemeLoader {
         hubByKey.put(key, standalone);
         end.connect(standalone);
         return true;
+    }
+
+    /**
+     * Počet koncov vodičov, ktoré v XML odkazujú na spájač v tom istom bode. Slúži na
+     * rozlíšenie starých súborov (na bod odkazuje jediný koniec odbočky) od nových, kde
+     * je bod popísaný všetkými svojimi koncami - vtedy sa prechádzajúci kmeň nerozdeľuje.
+     */
+    private static Map<Long, Integer> countJunctionRefs(Element wiresElement) {
+        Map<Long, Integer> refs = new HashMap<>();
+        for (Element wireElement : wiresElement.getChildren("Wire")) {
+            for (String name : new String[]{"start", "end"}) {
+                Element endElement = wireElement.getChild(name);
+                if (endElement == null) continue;
+                Element junctionElement = endElement.getChild("junction");
+                if (junctionElement == null) continue;
+                try {
+                    double x = Double.parseDouble(junctionElement.getChildText("x"));
+                    double y = Double.parseDouble(junctionElement.getChildText("y"));
+                    refs.merge(keyOf(x, y), 1, Integer::sum);
+                } catch (NumberFormatException | NullPointerException ignored) {
+                }
+            }
+        }
+        return refs;
     }
 
     /**
