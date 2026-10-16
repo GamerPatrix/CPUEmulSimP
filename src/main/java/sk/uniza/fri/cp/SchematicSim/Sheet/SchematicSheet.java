@@ -146,6 +146,13 @@ public class SchematicSheet extends ScrollPane {
     /** Vodič práve zvýraznený pri prechode kurzora (hover), null ak žiadny. */
     private Wire hoveredWire;
 
+    /**
+     * Či súčasný ťah myši vznikol stlačením na ploche v okolí zvýrazneného vodiča
+     * (odbočka z neho, nie posun plochy). Bežné ťahy začaté priamo na vodiči/pine/
+     * spájači majú vlastné handlery, tento príznak sa ich netýka.
+     */
+    private boolean backgroundBranchDrag;
+
     private final EventHandler<MouseDragEvent> onMouseDragEnteredHandle = event -> {
         if (!isEditingEnabled()) return;
         hasChanged = true;
@@ -339,10 +346,82 @@ public class SchematicSheet extends ScrollPane {
         //minimálny ťah by schémy posunul o celú vzdialenosť od staršej polohy.
         scrollContent.addEventFilter(MouseEvent.MOUSE_PRESSED, event -> {
             lastMouseCoordinates.set(new Point2D(event.getX(), event.getY()));
-            panAllowed = isOnWireDropSurface(event.getPickResult().getIntersectedNode());
+            Node pressedNode = event.getPickResult() == null ? null : event.getPickResult().getIntersectedNode();
+            panAllowed = isOnWireDropSurface(pressedNode);
+            backgroundBranchDrag = false;
+
+            // klik (bez Shift/Ctrl, nie dvojklik) vyberie VŽDY vodič, ktorý je práve
+            // zvýraznený (najbližší) - nie ten, na ktorého neviditeľnej ploche
+            // (koniec/spájač) pick pristal
+            if (event.getButton() == MouseButton.PRIMARY && event.getClickCount() == 1
+                    && !event.isShiftDown() && !event.isShortcutDown()
+                    && findAncestor(pressedNode, GateSymbol.class) == null) {
+                Wire highlighted = findNearestWire(null, sceneToSheet(event.getSceneX(), event.getSceneY()));
+                if (highlighted != null) {
+                    clearSelect();
+                    addSelect(highlighted);
+                    panAllowed = false; // ťah z tohto miesta = odbočka, nie posun plochy
+                    event.consume();
+                }
+            }
+        });
+
+        // ťah začatý v okolí zvýrazneného vodiča sa zmení na tvorbu odbočky z TOHO vodiča
+        // (rovnako ako zvýraznenie), a to aj keď pick pristál na veľkej neviditeľnej
+        // ploche konca/spájača susedného vodiča - inak by odbočka vznikla na susedovi
+        scrollContent.addEventFilter(MouseEvent.DRAG_DETECTED, event -> {
+            if (!isEditingEnabled()) return;
+            if (!event.isPrimaryButtonDown() || event.isShiftDown()) return;
+
+            Node picked = event.getPickResult() == null ? null : event.getPickResult().getIntersectedNode();
+            if (picked == null && event.getTarget() instanceof Node) picked = (Node) event.getTarget();
+            // pin a súčiastka majú vlastné spracovanie ťahu (spájač NIE - ten má veľkú
+            // neviditeľnú plochu a mohol by "ukradnúť" fokus susednému vodiču)
+            if (findAncestor(picked, Pin.class) != null
+                    || findAncestor(picked, GateSymbol.class) != null) {
+                return;
+            }
+
+            Point2D sheetXY = sceneToSheet(event.getSceneX(), event.getSceneY());
+            Wire nearest = findNearestWire(null, sheetXY);
+            if (nearest == null) return; // v okolí nie je vodič - bežné správanie
+            // stlačenie pristálo presne na tomto vodiči (telo/koniec) - odbočku alebo
+            // uchopenie konca vyrieši jeho vlastný handler
+            if (findAncestor(picked, Wire.class) == nearest) return;
+
+            // odbočka sa začne z NAJBLIŽŠIEHO (zvýrazneného) vodiča - aj keď pick pristál
+            // na veľkej neviditeľnej ploche/spájači susedného vodiča. Spájač (koleno) sa
+            // použije len ak leží na tomto vodiči a je v okolí; inak sa vodič rozdelí.
+            double grid = getGrid().getSizeMin();
+            WireJunction junction = null;
+            for (WireEnd end : nearest.getEnds()) {
+                WireJunction j = end.getJunction();
+                if (j != null && !j.isRemoved()
+                        && j.getConnectionPoint().distance(sheetXY) <= grid / 2.0) {
+                    junction = j;
+                    break;
+                }
+            }
+            if (junction == null) junction = nearest.splitAtPoint(sheetXY);
+            if (junction == null) {
+                panAllowed = true; // odbočku nerozbehneme - nech platí aspoň pohyb plochy
+                return;
+            }
+            backgroundBranchDrag = true;
+            Pin.beginWireCreation(junction);
+            this.startFullDrag();
+            event.consume();
         });
 
         scrollContent.setOnMouseDragged(event -> {
+            // ťah odbočky začatej pri vodiči na pozadí - aktualizuj náhľad (bežné ťahy
+            // z vodiča/pinu/kotvy si aktualizujú náhľad vo vlastných handleroch)
+            if (backgroundBranchDrag && Pin.getInProgressWire() != null) {
+                Point2D sheetXY = sceneToSheet(event.getSceneX(), event.getSceneY());
+                Pin.getInProgressWire().updateCreationDrag(sheetXY.getX(), sheetXY.getY());
+                event.consume();
+                return;
+            }
             //pan sa nepoužíva s pravým tlačidlom - po zobrazení kontextového menu by pohyb myši
             //(ešte so stlačeným tlačidlom) posúval schému a nie výber položky menu
             if (event.getButton() == MouseButton.SECONDARY) return;
@@ -357,6 +436,15 @@ public class SchematicSheet extends ScrollPane {
             zoomPane.setTranslateX(zoomPane.getTranslateX() + deltaX);
             zoomPane.setTranslateY(zoomPane.getTranslateY() + deltaY);
             enforceContentInView(zoomPane);
+        });
+
+        // odbočka z vodiča na pozadí: pustenie dokončí rozpracovaný vodič (pri pustení na
+        // pin/spájač/vodič už rozhodol spoločný handler)
+        scrollContent.addEventHandler(MouseEvent.MOUSE_RELEASED, event -> {
+            if (backgroundBranchDrag && Pin.getInProgressWire() != null) {
+                Pin.finishInProgressWire();
+                event.consume();
+            }
         });
 
         setupWireToWireHandler();

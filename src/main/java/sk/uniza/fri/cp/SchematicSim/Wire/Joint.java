@@ -34,10 +34,13 @@ public class Joint extends Movable {
 
         double cell = getSheet().getComponentCell();
 
-        Rectangle boundingBox = new Rectangle(cell, cell);
+        // klikacia plocha jointu = jedna bunka mriežky (nie celá komponentová bunka,
+        // tá je 20x20 a prekrývala by susedný vodič vzdialený o mriežku)
+        double box = getSheet().getGrid().getSizeMin();
+        Rectangle boundingBox = new Rectangle(box, box);
         boundingBox.setOpacity(0);
-        boundingBox.setLayoutX(-cell / 2.0);
-        boundingBox.setLayoutY(-cell / 2.0);
+        boundingBox.setLayoutX(-box / 2.0);
+        boundingBox.setLayoutY(-box / 2.0);
 
         this.radius = cell / 7.0;
         Group graphic = generateJointGraphic(radius);
