@@ -81,6 +81,20 @@ public abstract class BusSymbol extends GateSymbol {
         return 5;
     }
 
+    /**
+     * Veľkosť bunky mriežky plochy (10 px). Vývody zbernice (tapy) sa umiestňujú na
+     * túto mriežku, aby sa na ne dali pripojiť aj signály - ich vývod je odsadený o
+     * pol bunky od začiatku komponenty.
+     */
+    protected int gridCell() {
+        if (getSheet() == null) return 10;
+        try {
+            if (getSheet().getGrid() != null) return getSheet().getGrid().getSizeX();
+        } catch (Throwable ignored) {
+        }
+        return getSheet().getComponentCell();
+    }
+
     @Override
     public int getGridHeight() {
         return getBusPinNames().length;

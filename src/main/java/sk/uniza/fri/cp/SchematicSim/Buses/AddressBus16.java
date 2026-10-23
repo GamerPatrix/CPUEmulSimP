@@ -85,6 +85,15 @@ public class AddressBus16 extends BusSymbol {
     private boolean resizing;
     private boolean resizingTop;
 
+    /** Stlačenie myši začalo priamo na lište zbernice. */
+    private boolean pressedOnRail;
+    /** True, ak sme od stlačenia myšu posunuli - tak sa nejde o klik, ale o presun zbernice. */
+    private boolean draggedOnRail;
+    private double pressSceneX;
+    private double pressSceneY;
+    /** Minimálny posun myši (v bodoch), pri ktorom sa klik považuje za ťah. */
+    private static final double DRAG_THRESHOLD = 3.0;
+
     private List<Pin> pinsRef;
     private final List<TapPoint> taps = new ArrayList<>();
 
@@ -161,6 +170,27 @@ public class AddressBus16 extends BusSymbol {
         line.setStrokeWidth(1);
         line.addEventHandler(MouseEvent.MOUSE_CLICKED, this::handleRailClick);
         line.addEventHandler(MouseEvent.MOUSE_RELEASED, this::handleRailRelease);
+        // rozlišenie kliku od ťahu (presun zbernice) - po ťahu sa menu otvoriť nesmie
+        line.addEventFilter(MouseEvent.MOUSE_PRESSED, e -> {
+            pressedOnRail = true;
+            pressSceneX = e.getSceneX();
+            pressSceneY = e.getSceneY();
+            draggedOnRail = false;
+        });
+        line.addEventFilter(MouseEvent.MOUSE_DRAGGED, e -> {
+            if (Math.abs(e.getSceneX() - pressSceneX) > DRAG_THRESHOLD
+                    || Math.abs(e.getSceneY() - pressSceneY) > DRAG_THRESHOLD) {
+                draggedOnRail = true;
+            }
+        });
+        this.addEventFilter(MouseEvent.MOUSE_PRESSED, e -> {
+            if (!pressedOnRail) {
+                pressSceneX = e.getSceneX();
+                pressSceneY = e.getSceneY();
+            }
+            pressedOnRail = false;
+            draggedOnRail = false;
+        });
 
         // neviditeľné rukoväte na zmenu dĺžky - cítiť ich je len kurzorom, samotné nie sú vidieť.
         // Obidve rukoväte sú vystredené na nakreslené konce čiary, aby sa kurzor menil
@@ -207,7 +237,7 @@ public class AddressBus16 extends BusSymbol {
     public Pin createTap(int bit, double localY) {
         int cell = getSheet().getComponentCell();
         double x = RAIL_WIDTH * cell / 2.0;
-        double y = snap(clamp(localY, (topRow + 1) * cell, rows * cell), cell);
+        double y = snap(clamp(localY, (topRow + 1) * cell, rows * cell), gridCell());
 
         TapPin pin = new TapPin(this, "AB" + bit, bit);
         pin.setLayoutX(x);
@@ -317,12 +347,15 @@ public class AddressBus16 extends BusSymbol {
     private void handleRailClick(MouseEvent event) {
         if (event.getButton() != MouseButton.PRIMARY) return;
         if (Pin.getInProgressWire() != null) return;
+        // po presunutí zbernice myšou sa menu otvoriť nesmie - ide o ťah, nie o klik
+        if (draggedOnRail) return;
         final double localY = toLocalY(event);
         openSignalMenu(bit -> createTap(bit, localY), this::createAllTaps, -1, event.getScreenX(), event.getScreenY());
     }
 
     private void handleRailRelease(MouseEvent event) {
         if (event.getButton() != MouseButton.PRIMARY) return;
+        if (pressedOnRail && draggedOnRail) return;
         Wire creating = Pin.getInProgressWire();
         if (creating == null) return;
         if (creating.areBothEndsConnected()) return;
