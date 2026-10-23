@@ -69,9 +69,10 @@ public class DataBus8 extends BusSymbol {
     }
 
     private static final int RAIL_WIDTH = 2;
-    private static final int DEFAULT_ROWS = 8;
-    private static final int MIN_ROWS = 3;
-    private static final int MAX_ROWS = 60;
+    /** Počet riadkov v bunkách mriežky plochy (10 px), nie v bunkách komponentu. */
+    private static final int DEFAULT_ROWS = 16;
+    private static final int MIN_ROWS = 6;
+    private static final int MAX_ROWS = 120;
 
     private static final Color RAIL_COLOR = Color.DARKGREEN;
 
@@ -173,10 +174,11 @@ public class DataBus8 extends BusSymbol {
 
     private void initRail() {
         int cell = getSheet().getComponentCell();
+        int rowUnit = gridCell();
         double railCenterX = RAIL_WIDTH * cell / 2.0;
         double thickness = Math.max(4, cell * RAIL_THICKNESS);
 
-        line = new Rectangle(railCenterX - thickness / 2.0, topRow * cell + cell / 2.0, thickness, railHeight(cell));
+        line = new Rectangle(railCenterX - thickness / 2.0, topRow * rowUnit + rowUnit / 2.0, thickness, railHeight(rowUnit));
         line.setFill(RAIL_COLOR);
         line.setStroke(Color.BLACK);
         line.setStrokeWidth(1);
@@ -207,14 +209,14 @@ public class DataBus8 extends BusSymbol {
         // neviditeľné rukoväte na zmenu dĺžky - cítiť ich je len kurzorom, samotné nie sú vidieť.
         // Obidve rukoväte sú vystredené na nakreslené konce čiary, aby sa kurzor menil
         // presne pri koncoch zbernice a nie pod ňou / nad ňou.
-        resizeHandle = new Circle(railCenterX, rows * cell - cell / 2.0, cell * 0.35, Color.TRANSPARENT);
+        resizeHandle = new Circle(railCenterX, rows * rowUnit - rowUnit / 2.0, cell * 0.35, Color.TRANSPARENT);
         resizeHandle.setStroke(Color.TRANSPARENT);
         resizeHandle.setCursor(Cursor.N_RESIZE);
         resizeHandle.addEventFilter(MouseEvent.MOUSE_PRESSED, this::handleResizePressed);
         resizeHandle.addEventFilter(MouseEvent.MOUSE_DRAGGED, this::handleResizeDragged);
         resizeHandle.addEventFilter(MouseEvent.MOUSE_RELEASED, this::handleResizeReleased);
 
-        resizeTopHandle = new Circle(railCenterX, topRow * cell + cell / 2.0, cell * 0.35, Color.TRANSPARENT);
+        resizeTopHandle = new Circle(railCenterX, topRow * rowUnit + rowUnit / 2.0, cell * 0.35, Color.TRANSPARENT);
         resizeTopHandle.setStroke(Color.TRANSPARENT);
         resizeTopHandle.setCursor(Cursor.N_RESIZE);
         resizeTopHandle.addEventFilter(MouseEvent.MOUSE_PRESSED, this::handleResizePressed);
@@ -248,8 +250,9 @@ public class DataBus8 extends BusSymbol {
 
     public Pin createTap(int bit, double localY) {
         int cell = getSheet().getComponentCell();
+        int rowUnit = gridCell();
         double x = RAIL_WIDTH * cell / 2.0;
-        double y = snap(clamp(localY, (topRow + 1) * cell, rows * cell), gridCell());
+        double y = snap(clamp(localY, topRow * rowUnit + cell, rows * rowUnit), rowUnit);
 
         TapPin pin = new TapPin(this, "DB" + bit, bit);
         pin.setLayoutX(x);
@@ -264,7 +267,7 @@ public class DataBus8 extends BusSymbol {
 
         Text label = new Text("DB" + bit);
         label.setLayoutX(x + cell * 0.6);
-        label.setLayoutY(y - cell * 0.4);
+        label.setLayoutY(y - cell * 0.2);
         label.setFont(Font.font(cell * 0.5));
         label.setFill(RAIL_COLOR);
         label.setMouseTransparent(true);
@@ -325,25 +328,26 @@ public class DataBus8 extends BusSymbol {
      */
     private Pin createAllTaps() {
         int cell = getSheet().getComponentCell();
+        int rowUnit = gridCell();
         int count = menuItems.length;
         Pin first = null;
         Set<Integer> usedRows = new HashSet<>();
         for (TapPoint tap : taps) {
-            usedRows.add((int) Math.round(tap.pin.getLayoutY() / cell));
+            usedRows.add((int) Math.round(tap.pin.getLayoutY() / rowUnit));
         }
-        int nextFreeRow = 1;
+        int nextFreeRow = topRow + 2;
         for (int i = 0; i < count; i++) {
             if (hasTap(i)) continue;
             while (usedRows.contains(nextFreeRow)) {
-                nextFreeRow++;
+                nextFreeRow += 2;
             }
             if (nextFreeRow >= rows) {
-                setRows(nextFreeRow + 1);
+                setRows(nextFreeRow + 2);
             }
             usedRows.add(nextFreeRow);
-            Pin pin = createTap(i, nextFreeRow * cell);
+            Pin pin = createTap(i, nextFreeRow * rowUnit);
             if (first == null) first = pin;
-            nextFreeRow++;
+            nextFreeRow += 2;
         }
         if (first == null && !pinsRef.isEmpty()) {
             first = pinsRef.get(0);
@@ -411,10 +415,11 @@ public class DataBus8 extends BusSymbol {
     private void handleResizeDragged(MouseEvent event) {
         if (!resizing) return;
         int cell = getSheet().getComponentCell();
+        int rowUnit = gridCell();
         double localY = toLocalY(event);
         if (resizingTop) {
             int maxTopRow = Math.min(rows - MIN_ROWS, minTopRowForTaps());
-            int newTopRow = clamp((int) Math.round((localY - cell / 2.0) / cell), -MAX_ROWS, maxTopRow);
+            int newTopRow = clamp((int) Math.round((localY - rowUnit / 2.0) / rowUnit), -MAX_ROWS, maxTopRow);
             if (newTopRow != topRow) {
                 topRow = newTopRow;
                 updateRailGeometry();
@@ -422,7 +427,7 @@ public class DataBus8 extends BusSymbol {
                 getSheet().markChanged();
             }
         } else {
-            int newRows = clamp((int) Math.round(localY / cell), Math.max(topRow + MIN_ROWS, minRowsForTaps()), MAX_ROWS);
+            int newRows = clamp((int) Math.round(localY / rowUnit), Math.max(topRow + MIN_ROWS, minRowsForTaps()), MAX_ROWS);
             if (newRows != rows) {
                 rows = newRows;
                 updateRailGeometry();
@@ -443,11 +448,12 @@ public class DataBus8 extends BusSymbol {
     /** Premietnutie topRow/rows do geometrie čiary a rukovätí. */
     private void updateRailGeometry() {
         int cell = getSheet().getComponentCell();
-        line.setY(topRow * cell + cell / 2.0);
-        line.setHeight(railHeight(cell));
-        resizeHandle.setCenterY(rows * cell - cell / 2.0);
-        resizeTopHandle.setCenterY(topRow * cell + cell / 2.0);
-        title.setLayoutY(topRow * cell + cell * 0.15);
+        int rowUnit = gridCell();
+        line.setY(topRow * rowUnit + rowUnit / 2.0);
+        line.setHeight(railHeight(rowUnit));
+        resizeHandle.setCenterY(rows * rowUnit - rowUnit / 2.0);
+        resizeTopHandle.setCenterY(topRow * rowUnit + rowUnit / 2.0);
+        title.setLayoutY(topRow * rowUnit + cell * 0.15);
     }
 
     // === menu výberu vývodu ===
@@ -607,12 +613,12 @@ public class DataBus8 extends BusSymbol {
      * (plus rezervný riadok kvôli rukoväti na zmenu dĺžky).
      */
     private int minRowsForTaps() {
-        int cell = getSheet().getComponentCell();
+        int rowUnit = gridCell();
         int maxRow = 0;
         for (TapPoint tap : taps) {
-            maxRow = Math.max(maxRow, (int) Math.round(tap.pin.getLayoutY() / cell));
+            maxRow = Math.max(maxRow, (int) Math.round(tap.pin.getLayoutY() / rowUnit));
         }
-        return maxRow + 1;
+        return maxRow + 2;
     }
 
     /**
@@ -622,19 +628,21 @@ public class DataBus8 extends BusSymbol {
      */
     private int minTopRowForTaps() {
         if (taps.isEmpty()) return Integer.MAX_VALUE;
-        int cell = getSheet().getComponentCell();
+        int rowUnit = gridCell();
         int minRow = Integer.MAX_VALUE;
         for (TapPoint tap : taps) {
-            minRow = Math.min(minRow, (int) Math.round(tap.pin.getLayoutY() / cell));
+            minRow = Math.min(minRow, (int) Math.round(tap.pin.getLayoutY() / rowUnit));
         }
-        return minRow - 1;
+        return minRow - 2;
     }
 
     @Override
     public Map<String, String> saveProperties() {
         Map<String, String> properties = new LinkedHashMap<>();
+        int rowUnit = gridCell();
         properties.put("rows", Integer.toString(rows));
         properties.put("topRow", Integer.toString(topRow));
+        properties.put("rowUnit", Integer.toString(rowUnit));
 
         StringBuilder tapsValue = new StringBuilder();
         for (TapPoint tap : taps) {
@@ -647,10 +655,21 @@ public class DataBus8 extends BusSymbol {
 
     @Override
     public void loadProperties(Map<String, String> properties) {
+        int rowUnit = gridCell();
+        int storedRowUnit = getSheet() != null ? getSheet().getComponentCell() : rowUnit;
+        String unitValue = properties.get("rowUnit");
+        if (unitValue != null) {
+            try {
+                storedRowUnit = Integer.parseInt(unitValue.trim());
+            } catch (NumberFormatException ignored) {
+            }
+        }
+
         String topRowValue = properties.get("topRow");
         if (topRowValue != null) {
             try {
-                setTopRowInternal(Integer.parseInt(topRowValue.trim()));
+                int rawTopRow = Integer.parseInt(topRowValue.trim());
+                setTopRowInternal((int) Math.round(rawTopRow * (double) storedRowUnit / rowUnit));
             } catch (NumberFormatException ignored) {
             }
         }
@@ -658,7 +677,8 @@ public class DataBus8 extends BusSymbol {
         String rowsValue = properties.get("rows");
         if (rowsValue != null) {
             try {
-                setRows(Integer.parseInt(rowsValue.trim()));
+                int rawRows = Integer.parseInt(rowsValue.trim());
+                setRows((int) Math.round(rawRows * (double) storedRowUnit / rowUnit));
             } catch (NumberFormatException ignored) {
             }
         }
