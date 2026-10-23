@@ -63,10 +63,10 @@ public class Signal extends GateSymbol {
 
     /** Minimálna šírka tela v mriežkových bunkách. */
     private static final int MIN_BODY_WIDTH = 3;
-    /** Výška tela v mriežkových bunkách. */
-    private static final int BODY_HEIGHT = 2;
-    /** Hĺbka trojuholníkového výbežku v mriežkových bunkách. */
-    private static final int TRIANGLE_DEPTH = 1;
+    /** Hrúbka tela (naprieč osou vývodu) v mriežkových bunkách. */
+    private static final double BODY_THICKNESS = 1.4;
+    /** Stred hrúbky tela v bunkách - vďaka nemu zostane vývod na mriežke plochy. */
+    private static final double BODY_CENTER = 1.0;
 
     /** Meno signálu - null, kým signál nie je pomenovaný. */
     private String signalName;
@@ -143,7 +143,7 @@ public class Signal extends GateSymbol {
         polygon.getPoints().addAll(bodyPoints());
         polygon.setFill(Color.WHITESMOKE);
         polygon.setStroke(Color.BLACK);
-        polygon.setStrokeWidth(3);
+        polygon.setStrokeWidth(1);
         polygon.setOnMousePressed(event -> {
             if (event.getButton() == MouseButton.SECONDARY) {
                 if (getSheet() != null && getSheet().isEditingEnabled()) {
@@ -177,43 +177,48 @@ public class Signal extends GateSymbol {
 
     /**
      * Vrcholy tela v bodoch (poloha x, poloha y) podľa aktuálnej strany vývodu.
-     * Súradnice sú v gridových jednotkách, násobené veľkosťou bunky.
+     * Súradnice sú v gridových jednotkách, násobené veľkosťou bunky. Hrúbka tela
+     * (naprieč osou vývodu) je {@link #BODY_THICKNESS} buniek a je vystredená na
+     * {@link #BODY_CENTER}, aby vývod zostal na mriežke plochy.
      */
     private List<Double> bodyPoints() {
         int cell = gridCell();
+        double near = (BODY_CENTER - BODY_THICKNESS / 2.0) * cell;
+        double center = BODY_CENTER * cell;
+        double far = (BODY_CENTER + BODY_THICKNESS / 2.0) * cell;
         List<Double> points = new ArrayList<>();
         switch (side) {
             case RIGHT:
-                // [0,0],[3,0],[4,1],[3,2],[0,2]
-                points.add(0.0 * cell); points.add(0.0 * cell);
-                points.add(3.0 * cell); points.add(0.0 * cell);
-                points.add(4.0 * cell); points.add(1.0 * cell);
-                points.add(3.0 * cell); points.add(2.0 * cell);
-                points.add(0.0 * cell); points.add(2.0 * cell);
+                // [0,0.3],[3,0.3],[4,1],[3,1.7],[0,1.7]
+                points.add(0.0 * cell); points.add(near);
+                points.add(3.0 * cell); points.add(near);
+                points.add(4.0 * cell); points.add(center);
+                points.add(3.0 * cell); points.add(far);
+                points.add(0.0 * cell); points.add(far);
                 break;
             case LEFT:
-                // [0,1],[1,0],[4,0],[4,2],[1,2]
-                points.add(0.0 * cell); points.add(1.0 * cell);
-                points.add(1.0 * cell); points.add(0.0 * cell);
-                points.add(4.0 * cell); points.add(0.0 * cell);
-                points.add(4.0 * cell); points.add(2.0 * cell);
-                points.add(1.0 * cell); points.add(2.0 * cell);
+                // [0,1],[1,0.3],[4,0.3],[4,1.7],[1,1.7]
+                points.add(0.0 * cell); points.add(center);
+                points.add(1.0 * cell); points.add(near);
+                points.add(4.0 * cell); points.add(near);
+                points.add(4.0 * cell); points.add(far);
+                points.add(1.0 * cell); points.add(far);
                 break;
             case TOP:
-                // [0,1],[1,0],[2,1],[2,4],[0,4]
-                points.add(0.0 * cell); points.add(1.0 * cell);
-                points.add(1.0 * cell); points.add(0.0 * cell);
-                points.add(2.0 * cell); points.add(1.0 * cell);
-                points.add(2.0 * cell); points.add(4.0 * cell);
-                points.add(0.0 * cell); points.add(4.0 * cell);
+                // [0.3,1],[1,0],[1.7,1],[1.7,4],[0.3,4]
+                points.add(near); points.add(1.0 * cell);
+                points.add(center); points.add(0.0 * cell);
+                points.add(far); points.add(1.0 * cell);
+                points.add(far); points.add(4.0 * cell);
+                points.add(near); points.add(4.0 * cell);
                 break;
             default: // BOTTOM
-                // [0,0],[2,0],[2,3],[1,4],[0,3]
-                points.add(0.0 * cell); points.add(0.0 * cell);
-                points.add(2.0 * cell); points.add(0.0 * cell);
-                points.add(2.0 * cell); points.add(3.0 * cell);
-                points.add(1.0 * cell); points.add(4.0 * cell);
-                points.add(0.0 * cell); points.add(3.0 * cell);
+                // [0.3,0],[1.7,0],[1.7,3],[1,4],[0.3,3]
+                points.add(near); points.add(0.0 * cell);
+                points.add(far); points.add(0.0 * cell);
+                points.add(far); points.add(3.0 * cell);
+                points.add(center); points.add(4.0 * cell);
+                points.add(near); points.add(3.0 * cell);
                 break;
         }
         return points;
