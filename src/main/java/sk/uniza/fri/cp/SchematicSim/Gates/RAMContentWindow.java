@@ -14,6 +14,7 @@ import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
 import javafx.util.Duration;
+import sk.uniza.fri.cp.App.ThemeManager;
 
 /**
  * Samostatné okno so zobrazením obsahu pamäte RAM 8k.
@@ -82,6 +83,7 @@ public class RAMContentWindow {
         HBox.setHgrow(asciiColumn, Priority.ALWAYS);
 
         Scene scene = new Scene(root, 820, 540);
+        ThemeManager.registerScene(scene);
         this.stage.setScene(scene);
         this.stage.setMinWidth(520);
         this.stage.setMinHeight(300);

@@ -42,6 +42,7 @@ import sk.uniza.fri.cp.App.CPUControl.CodeEditor.CodeEditorFactory;
 import sk.uniza.fri.cp.App.CPUControl.CodeEditor.RichTextFXHelpers;
 import sk.uniza.fri.cp.App.CPUControl.io.ConsoleOutputStream;
 import sk.uniza.fri.cp.App.SchematicControl.SchematicController;
+import sk.uniza.fri.cp.App.ThemeManager;
 import sk.uniza.fri.cp.App.WindowSettings;
 import sk.uniza.fri.cp.Bus.Bus;
 import sk.uniza.fri.cp.CPUEmul.CPU;
@@ -200,6 +201,9 @@ public class CPUController implements Initializable {
 
     //Kontinualne updateovanie GUI
     @FXML private CheckMenuItem chmiSettingsAllowUpdateGUI;
+
+    //Prepnutie tmavého motívu
+    @FXML private CheckMenuItem chmiSettingsDarkMode;
     volatile private int GUIUpdateInt = 150;
 
     private Service updateGUIService = new Service() {
@@ -263,6 +267,14 @@ public class CPUController implements Initializable {
         console = new InlineCssTextArea();
         console.setEditable(false);
         consolePane.getChildren().add(new VirtualizedScrollPane<>(console));
+
+        //zladenie polozky "Tmavy motiv" s ulozenym nastavenim a jeho prepinalanie
+        if (chmiSettingsDarkMode != null) {
+            chmiSettingsDarkMode.setSelected(ThemeManager.isDark());
+            ThemeManager.darkModeProperty().addListener((obs, oldV, newV) -> {
+                if (chmiSettingsDarkMode.isSelected() != newV) chmiSettingsDarkMode.setSelected(newV);
+            });
+        }
 
         //struktura pre breakpointy
         breakpointLines = new TreeSet<>();
@@ -805,6 +817,15 @@ public class CPUController implements Initializable {
     private void handleMenuSettingsWireColorsAction(){
         SchematicSheet sheet = schematicController != null ? schematicController.getSheet() : null;
         WireColorSettings.showEditor(sheet, primStage);
+    }
+
+    /**
+     * Prepnutie svetlého / tmavého motívu (Nastavenia → Tmavý motív).
+     * Tmavý motív je invertovaný svetlý vzhľad, preto sa mení iba efekt na scénach.
+     */
+    @FXML
+    private void handleMenuSettingsDarkModeAction(){
+        ThemeManager.setDarkMode(chmiSettingsDarkMode.isSelected());
     }
 
     /**

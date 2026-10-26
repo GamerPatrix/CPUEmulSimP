@@ -33,6 +33,9 @@ public class App extends Application {
 
     @Override
     public void start(Stage primaryStage) throws Exception {
+        //nacitanie ulozeneho motivu aplikacie (svetly / tmavy) a prihlasenie novych okien
+        ThemeManager.install();
+
         //nacitanie predvolenych farieb vodicov schémy
         WireColorSettings.loadAndApply();
 
@@ -46,6 +49,9 @@ public class App extends Application {
 
         //priradenie CSS stylov k scene
         mainScene.getStylesheets().add(getClass().getResource("/css/CPUEmul_style.css").toExternalForm());
+
+        //prihlasenie sceny pod spravu motivu (svetly / tmavy)
+        ThemeManager.registerScene(mainScene);
 
         //zachytenie vsetkych klaves (okrem funkcnych klaves) na mainScene
         //(http://stackoverflow.com/questions/25397742/javafx-keyboard-event-shortcut-key)

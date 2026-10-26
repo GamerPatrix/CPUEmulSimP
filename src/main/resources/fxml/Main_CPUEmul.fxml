@@ -96,6 +96,12 @@
                                      text="Povoliť aktualizáciu GUI"/>
                         <SeparatorMenuItem mnemonicParsing="false" />
                         <MenuItem mnemonicParsing="false" onAction="#handleMenuSettingsWireColorsAction" text="Farby vodičov..."/>
+                        <SeparatorMenuItem mnemonicParsing="false" />
+                        <CheckMenuItem fx:id="chmiSettingsDarkMode" mnemonicParsing="false" onAction="#handleMenuSettingsDarkModeAction" text="Tmavý motív">
+                           <accelerator>
+                              <KeyCodeCombination alt="UP" code="D" control="DOWN" meta="UP" shift="UP" shortcut="UP" />
+                           </accelerator>
+                        </CheckMenuItem>
                   </items>
                 </Menu>
                 <Menu mnemonicParsing="false" text="Pomoc">

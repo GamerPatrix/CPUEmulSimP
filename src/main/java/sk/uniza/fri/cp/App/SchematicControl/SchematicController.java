@@ -23,6 +23,7 @@ import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import org.controlsfx.control.ToggleSwitch;
 import sk.uniza.fri.cp.App.CPUControl.CPUController;
+import sk.uniza.fri.cp.App.ThemeManager;
 import sk.uniza.fri.cp.App.WindowSettings;
 import sk.uniza.fri.cp.CPUEmul.CPUStates;
 import sk.uniza.fri.cp.SchematicSim.Buses.AddressBus16;
@@ -147,7 +148,9 @@ public class SchematicController {
      * Vytvorenie scény okna simulátora.
      */
     public Scene getScene() {
-        return this.root.getScene() != null ? this.root.getScene() : new Scene(this.root, 1280, 850);
+        Scene scene = this.root.getScene() != null ? this.root.getScene() : new Scene(this.root, 1280, 850);
+        ThemeManager.registerScene(scene);
+        return scene;
     }
 
     public SchematicSheet getSheet() {
