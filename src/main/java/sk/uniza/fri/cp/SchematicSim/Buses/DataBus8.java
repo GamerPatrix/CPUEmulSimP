@@ -743,6 +743,11 @@ public class DataBus8 extends BusSymbol {
             for (TapPoint tap : taps) {
                 setPin(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
             }
+            // ControlBus (iný poslucháč tej istej vlastnosti) mohol IR//MR/ poslať do simulácie skôr,
+            // než sme nastavili read=true - obvod (napr. REG1 cez OE/) už vtedy pohol siete a naše
+            // simulate() pri read=false nič neprečítalo. Ak sa siete potom nezmenia, simulate()
+            // sa už nezavolá a na zbernici ostanú náhodné dáta. Aktuálny stav preto prečítame hneď.
+            readPinsIntoBus();
         } else if (!readActive && read) {
             read = false;
             Bus.getBus().dataIsChanging();

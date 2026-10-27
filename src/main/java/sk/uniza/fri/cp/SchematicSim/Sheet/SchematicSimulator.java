@@ -220,6 +220,10 @@ if (steadyState) {
             // asynchrónne zapojenie - odstránenie eventu na pine, ktorý už nie je aktuálny
             eventsQueue.removeIf(e -> e.getPin() != null && e.getPin().equals(event.getPin()));
             eventsQueue.put(event);
+            // zneplatnenie idle ešte na vlákne, ktoré udalosť vložilo (napr. CPU pri IR/=0) - inak by
+            // simulácia mohla udalosť vybrať z frontu (front prázdny, idle ešte true) a CPU by
+            // v tom okne považovalo zbernicu za ustálenú a prečítalo staré/náhodné dáta
+            Bus.getBus().simulationProcessingStarts();
         } catch (InterruptedException ignored) {
         }
     }
