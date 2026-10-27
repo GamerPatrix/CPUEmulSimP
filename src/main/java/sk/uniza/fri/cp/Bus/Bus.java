@@ -237,6 +237,8 @@ public class Bus{
      */
     public void dataInSteadyState() {
         synchronized (steadyMonitor) {
+            // medzičasom pribudla udalosť (napr. od CPU) - ešte nie sme ustálení
+            if (queue != null && !queue.isEmpty()) return;
             simulationIdle = true;
             steadyMonitor.notifyAll();
         }
