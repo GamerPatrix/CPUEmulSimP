@@ -15,7 +15,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.security.InvalidParameterException;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
 
 /**
@@ -54,7 +53,12 @@ public class CPU extends Thread {
 //    private int UsbITCheckSkipped = 0; //preskocenie kazdych x cyklov pred citanim IT cez USB (USB je prilis pomale)
 
 	/** Synchronizacne nastroje */
-	private CountDownLatch cdlHalt; //pasivne cakanie pri pozastaveni vykonavania alebo cakani na spustenie
+	//pasivne cakanie pri pozastaveni vykonavania alebo cakani na spustenie - monitor s priznakom
+	//zobudenia (namiesto CountDownLatch vytvaraneho az pri cakani, kde sa zobudenie z GUI, ktore
+	//prislo tesne pred vytvorenim latchu, stratilo a CPU ostalo navzdy zaseknute)
+	private final Object haltLock = new Object();
+	private boolean haltWakeRequested; //chranene haltLock
+	private boolean halted;            //CPU prave caka v haltAwait() - chranene haltLock
     private final Semaphore semKey;   //semafor na pristup ku stlacenej klavese
 
 	/** Registre */
@@ -63,7 +67,8 @@ public class CPU extends Thread {
     volatile private byte regC;
     volatile private byte regD;
     volatile private short regMP;
-    volatile private short regPC;
+    volatile private short regPC; //16 bitov bez znamienka (0..65535) - pracovat cez Short.toUnsignedInt
+    volatile private int currentInstructionAddress; //adresa prave vykonavanej instrukcie (0..65535)
     volatile private short regSP;
     volatile private boolean flagCY;
     volatile private boolean flagIE;
@@ -110,6 +115,9 @@ public class CPU extends Thread {
         this.setName("CPU_Thread");
 	}
 
+    /** Maximálne čakanie (ms) na rozbehnutie simulácie pri štarte programu. */
+    private static final long SIMULATION_START_TIMEOUT_MS = 2000;
+
     private long startInstExeTime = 0;
     private long endInstExeTime = 0;
 
@@ -134,11 +142,32 @@ public class CPU extends Thread {
                 }
             }
 
+            //zmazanie zastaraleho priznaku prerusenia z predosleho Stop (prisiel, ked CPU necakalo
+            //v prerusitelnom volani) - inak by prve cakanie noveho behu hned vyhodilo vynimku
+            //a beh by sa sam ukoncil
+            Thread.interrupted();
+
+            //program so vstupno/vystupnymi instrukciami zapina simulaciu, ktora sa rozbieha
+            //asynchronne - pockaj na nu (ak sa nerozbehne, ohlasi sa chyba zbernice pri citani)
+            if (program.hasIOInstruction()) {
+                try {
+                    bus.waitForSimulationStart(SIMULATION_START_TIMEOUT_MS);
+                } catch (InterruptedException e) {
+                    //Stop pocas cakania - vykonavanie skonci podla isExecuting
+                }
+            }
+
             Instruction nextInstruction;
             boolean it = false; //interrupt
 
             state.setValue(CPUStates.Running);
 
+            //neaktivne riadiace signaly CPU (IT budi schema, ten sa nemeni), nahodna adresa a data
+            bus.setMW_(true);
+            bus.setMR_(true);
+            bus.setIW_(true);
+            bus.setIR_(true);
+            bus.setIA_(true);
             bus.setRandomAddress();
             bus.setRandomData();
 
@@ -147,15 +176,19 @@ public class CPU extends Thread {
             //vykonavaj pokial vlakno nebolo zrusene, je spustene vykonavanie a nie je koniec programu
             while (!isCancelled
                     && isExecuting
-                    && (nextInstruction = program.getInstruction(Short.toUnsignedInt(regPC++))) != null) {
+                    && (nextInstruction = program.getInstruction(currentInstructionAddress = Short.toUnsignedInt(regPC++))) != null) {
 
                 try {
-                    //kontrola nastavenia breaku v programe
-                    if (program.isSetBreak(regPC - 1) || f_pause) {
+                    //kontrola nastavenia breaku v programe (adresa bez znamienka - regPC-1 by pre
+                    //PC nad 32767 a po pretečení 65535 -> 0 dalo zápornú adresu)
+                    if (program.isSetBreak(currentInstructionAddress) || f_pause) {
+                        clearHaltWake();
                         updateMessage("Vykonávanie pozastavené");
                         state.setValue(CPUStates.Paused);
                         this.f_pause = true;
                         haltAwait();
+                        //zobudene tlacidlom Stop - instrukcia, na ktorej sa stalo, sa uz nevykona
+                        if (!isExecuting) break;
                     }
 
                     state.setValue(CPUStates.Running);
@@ -218,6 +251,19 @@ public class CPU extends Thread {
                             alert.setHeaderText("Chyba prerušenia");
                             alert.show();
                         });
+                    } else if (!(e instanceof InterruptedException)) {
+                        //neocakavana chyba pri vykonavani - nesmie sa potichu prehltnut, inak sa
+                        //program bez akehokolvek hlasenia zastavi
+                        e.printStackTrace(System.err);
+                        String detail = "Inštrukcia: " + nextInstruction.getType().name()
+                                + " (adresa " + currentInstructionAddress + ")\n" + e;
+                        Platform.runLater(()->{
+                            Alert alert = new Alert(Alert.AlertType.ERROR);
+                            alert.setTitle("Chyba");
+                            alert.setHeaderText("Chyba pri vykonávaní programu");
+                            alert.setContentText(detail);
+                            alert.show();
+                        });
                     }
 
                     this.isExecuting = false;
@@ -235,9 +281,10 @@ public class CPU extends Thread {
     public void startExecute(boolean startPaused){
         if(!this.isExecuting && this.program != null) {
             this.regPC = 0;
+            this.currentInstructionAddress = 0;
             this.isExecuting = true;
             this.f_pause = startPaused;
-            if (this.cdlHalt != null) cdlHalt.countDown();
+            wakeHalt();
         }
     }
 
@@ -255,7 +302,7 @@ public class CPU extends Thread {
     public void continueExecute(){
         if(this.f_pause) {
             f_pause = false;
-            if (cdlHalt != null) cdlHalt.countDown();
+            wakeHalt();
         }
 	}
 
@@ -264,7 +311,7 @@ public class CPU extends Thread {
      */
     public void step(){
         f_pause = true; //pri krokovani zastavit pred vykonanim dalsej inst.
-        if (cdlHalt != null) cdlHalt.countDown();
+        wakeHalt();
     }
 
     /**
@@ -273,8 +320,12 @@ public class CPU extends Thread {
     public void stopExecute(){
         if(this.isExecuting) {
             this.isExecuting = false;
-            if(this.cdlHalt != null) cdlHalt.countDown();
-            else interrupt();
+            synchronized (haltLock) {
+                //ak CPU caka v haltAwait(), staci ho zobudit; inak sa prerusi cakanie na zbernicu
+                //(ak sa CPU do haltAwait() prave chysta, prerusenie vyhodi wait() hned)
+                if (halted) wakeHalt();
+                else interrupt();
+            }
         }
     }
 
@@ -295,6 +346,7 @@ public class CPU extends Thread {
     public void reset(){
         regA = regB = regC = regD = 0;
         regMP = regPC = regSP = 0;
+        currentInstructionAddress = 0;
         flagCY = flagIE = flagZ = false;
 
         synchronized (this.RAM) {
@@ -362,6 +414,14 @@ public class CPU extends Thread {
      */
     public short getRegPC() {
         return regPC;
+    }
+
+    /**
+     * Vráti adresu práve vykonávanej (pri pozastavení nasledujúcej) inštrukcie, 0 až 65535.
+     * @return Adresa inštrukcie bez znamienka.
+     */
+    public int getCurrentInstructionAddress() {
+        return currentInstructionAddress;
     }
 
     /**
@@ -707,7 +767,7 @@ public class CPU extends Thread {
             case STR:
                 Rd = getRegisterVal(instruction.getFirstParameter());
                 Rs = getRegisterVal(instruction.getSecondParameter());
-                synchronized (this) {
+                synchronized (this.RAM) { //rovnaky zamok ako getRAM() a reset()
                     RAM[Rd] = (byte) Rs;
                 }
                 break;
@@ -975,6 +1035,11 @@ public class CPU extends Thread {
         microstepAwait("Nastavenie adresy");
         bus.setAddressBus(addr);
 
+        //cakanie na ustalenie adresy pred aktivovanim priznaku - dekoder nesmie so starou
+        //adresou ani na chvilu povolit iny obvod na zbernicu
+        this.waitForSteadySimulation(inst, false);
+        if (!isExecuting) throw new InterruptedException("CPU stopped");
+
         microstepAwait("Nastavenie priznaku " + (inst == enumInstructionsSet.INN?"IOR":"MR") + " = 0");
 
         //nastavenie priznaku citania
@@ -983,22 +1048,26 @@ public class CPU extends Thread {
         else
             bus.setMR_(false);
 
-        //cakanie na nastavenie dat na datovej zbernici
-        //updateMessage("Cakanie na nastavenie dat");
-        this.waitForSteadySimulation(inst, true);
-        if (!isExecuting) throw new InterruptedException("CPU stopped");
+        //priznak citania sa zrusi aj pri zastaveni CPU pocas citania - inak by ostal aktivny
+        try {
+            //cakanie na nastavenie dat na datovej zbernici
+            //updateMessage("Cakanie na nastavenie dat");
+            this.waitForSteadySimulation(inst, true);
+            if (!isExecuting) throw new InterruptedException("CPU stopped");
 
-        //nacitaj data
-        microstepAwait("Nacitanie dat");
-        byte Rd = bus.getDataBus();
-        setRegisterVal(destRegName, Rd);
+            //nacitaj data
+            microstepAwait("Nacitanie dat");
+            byte Rd = bus.getDataBus();
+            setRegisterVal(destRegName, Rd);
 
-        //zrus priznak citania
-        microstepAwait("Zrusenie priznaku " + (inst == enumInstructionsSet.INN?"IOR":"MR"));
-        if(inst == enumInstructionsSet.INN)
-            bus.setIR_(true);
-        else
-            bus.setMR_(true);
+            microstepAwait("Zrusenie priznaku " + (inst == enumInstructionsSet.INN?"IOR":"MR"));
+        } finally {
+            //zrus priznak citania
+            if(inst == enumInstructionsSet.INN)
+                bus.setIR_(true);
+            else
+                bus.setMR_(true);
+        }
         // nahodne data
         bus.setRandomData();
 
@@ -1025,6 +1094,12 @@ public class CPU extends Thread {
         microstepAwait("Nastavenie dat");
         bus.setDataBus(data);
 
+        //cakanie na ustalenie adresy a dat pred aktivovanim priznaku (predstih) - inak by zmena
+        //adresy a priznak padli do jednej vlny simulacie a dekoder by este videl staru adresu
+        //(napr. NOT + NOR by na chvilu povolil aj iny register a zapisal don data)
+        this.waitForSteadySimulation(inst, false);
+        if (!isExecuting) throw new InterruptedException("CPU stopped");
+
         //nastavenie priznaku
         microstepAwait("Nastavenie priznaku " + (inst == enumInstructionsSet.OUT?"IOW":"MW") + " = 0");
 
@@ -1034,16 +1109,20 @@ public class CPU extends Thread {
         else
             bus.setMW_(false);
 
-        //updateMessage("Cakanie na nastavenie dat");
-        this.waitForSteadySimulation(inst, true);
-        if (!isExecuting) throw new InterruptedException("CPU stopped");
+        //priznak zapisu sa zrusi aj pri zastaveni CPU pocas zapisu - inak by ostal aktivny
+        try {
+            //updateMessage("Cakanie na nastavenie dat");
+            this.waitForSteadySimulation(inst, true);
+            if (!isExecuting) throw new InterruptedException("CPU stopped");
 
-        //zrusenie priznaku
-        microstepAwait("Zrusenie priznaku ZAPISU");
-        if(inst == enumInstructionsSet.OUT)
-            bus.setIW_(true);
-        else
-            bus.setMW_(true);
+            microstepAwait("Zrusenie priznaku ZAPISU");
+        } finally {
+            //zrusenie priznaku
+            if(inst == enumInstructionsSet.OUT)
+                bus.setIW_(true);
+            else
+                bus.setMW_(true);
+        }
 
         //cakanie, aby sa nezapisali nespravne data
         this.waitForSteadySimulation(inst, false);
@@ -1067,9 +1146,12 @@ public class CPU extends Thread {
     private void microstepAwait(String msg) throws InterruptedException {
         //ak je zapnute mikrokrokovanie a zaroven sa aj krokuje
         if (isExecuting && f_microstep && f_pause) {
+            clearHaltWake();
             updateMessage(msg);
             state.setValue(CPUStates.Paused);
             haltAwait();
+            //zobudene tlacidlom Stop - zvysok mikrokrokov sa uz nevykona (signaly uvolni finally v read/write)
+            if (!isExecuting) throw new InterruptedException("CPU stopped");
             state.setValue(CPUStates.Running);
         }
     }
@@ -1080,9 +1162,36 @@ public class CPU extends Thread {
      * @throws InterruptedException Prerušenie počas čakania
      */
     private void haltAwait() throws InterruptedException {
-        cdlHalt = new CountDownLatch(1);
-        cdlHalt.await();
-        cdlHalt = null;
+        synchronized (haltLock) {
+            halted = true;
+            try {
+                while (!haltWakeRequested) haltLock.wait();
+                haltWakeRequested = false;
+            } finally {
+                halted = false;
+            }
+        }
+    }
+
+    /**
+     * Zrušenie zobudenia, ktoré prišlo ešte pred rozhodnutím CPU zastaviť (napr. Pokračovať
+     * kliknuté počas behu) - inak by nasledujúce zastavenie (breakpoint) hneď prebehlo.
+     * Volá sa v okamihu rozhodnutia o zastavení, pred haltAwait(); zobudenie po ňom sa už nestratí.
+     */
+    private void clearHaltWake() {
+        synchronized (haltLock) {
+            haltWakeRequested = false;
+        }
+    }
+
+    /**
+     * Zobudenie CPU čakajúceho v haltAwait(). Ak CPU ešte nečaká, zobudenie sa zapamätá.
+     */
+    private void wakeHalt() {
+        synchronized (haltLock) {
+            haltWakeRequested = true;
+            haltLock.notifyAll();
+        }
     }
 
     private long lastErrorMsgPrint = 0;

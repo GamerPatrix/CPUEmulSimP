@@ -9,7 +9,7 @@ import javafx.scene.shape.Circle;
 import javafx.scene.shape.Polygon;
 import javafx.scene.text.Text;
 import sk.uniza.fri.cp.SchematicSim.Pin.InputPin;
-import sk.uniza.fri.cp.SchematicSim.Pin.OutputPin;
+import sk.uniza.fri.cp.SchematicSim.Pin.TriStateOutputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Side;
@@ -65,7 +65,7 @@ public class BusBuffer extends GateSymbol {
     protected List<Pin> createPins() {
         a = new InputPin(this, "A", 0, 1, Side.LEFT);
         g = new InputPin(this, "G/", 1, 0, Side.TOP);
-        y = new OutputPin(this, "Y", getGridWidth(), 1, Side.RIGHT);
+        y = new TriStateOutputPin(this, "Y", getGridWidth(), 1, Side.RIGHT);
         return Arrays.asList(a, g, y);
     }
 
@@ -122,7 +122,7 @@ public class BusBuffer extends GateSymbol {
 
     @Override
     public String getName() {
-        return "Buffer";
+        return "BUF";
     }
 
     @Override

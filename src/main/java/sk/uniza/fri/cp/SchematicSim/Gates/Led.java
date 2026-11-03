@@ -117,7 +117,11 @@ public class Led extends GateSymbol {
             event.consume();
         });
 
-        return new Pane(light);
+        Pane body = new Pane(light);
+        // kliky iba na krúžku - neviditeľný obdĺžnik Pane (od 0,0) by pri tesnom umiestnení
+        // prekryl susednú súčiastku (napr. prepínač) a zobral by jej klik
+        body.setPickOnBounds(false);
+        return body;
     }
 
     private void showMenu(double screenX, double screenY) {

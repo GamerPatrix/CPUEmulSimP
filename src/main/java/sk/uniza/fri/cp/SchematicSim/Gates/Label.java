@@ -11,7 +11,6 @@ import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Dialog;
-import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.RadioMenuItem;
@@ -27,7 +26,6 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Polygon;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
-import sk.uniza.fri.cp.SchematicSim.Connectable;
 import sk.uniza.fri.cp.SchematicSim.ContextMenuHelper;
 import sk.uniza.fri.cp.SchematicSim.Electrical.PinType;
 import sk.uniza.fri.cp.SchematicSim.Electrical.Potential;
@@ -44,7 +42,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Pomenovaný bod siete - signál. Signály s rovnakým menom sú elektricky prepojené
+ * Label - pomenovaný bod siete. Labely s rovnakým menom sú elektricky prepojené
  * tak, ako by boli prepojené skrytým vodičom: hodnota privedená na jeden z nich je
  * dostupná na všetkých ostatných s tým istým menom.
  * <p>
@@ -52,14 +50,14 @@ import java.util.Optional;
  * Vývod je na vrchole trojuholníka; jeho stranu (vpravo/vľavo/hore/dole) možno meniť
  * v kontextovom menu. Šírka tela sa prispôsobí dĺžke mena (minimálne 3 bunky).
  * <p>
- * Elektricky je vývod typu {@link PinType#WEAK_OUT} - slabý výstup, ktorý silný budič
- * (výstup hradla) na tej istej sieti vždy pretiahne. Hodnotu signálu preto určuje
- * vždy skutočný zdroj v skupine signálov s rovnakým menom; signály bez zdroja zostávajú
- * plávajúce (NC).
+ * Elektricky je vývod pasívny ({@link PinType#IN}). Pri zapnutí simulácie sa medzi labelmi
+ * s rovnakým menom vytvoria neviditeľné vodiče ({@link #connectLabels}), po vypnutí sa
+ * odstránia ({@link #disconnectLabels}) - siete labelov s rovnakým menom sú tak počas
+ * simulácie jedna sieť a riadia sa rovnakými pravidlami ako siete spojené vodičom.
  *
  * @author Claude (návrh podľa SchematicSim architektúry)
  */
-public class Signal extends GateSymbol {
+public class Label extends GateSymbol {
 
     /** Minimálna šírka tela v mriežkových bunkách. */
     private static final int MIN_BODY_WIDTH = 3;
@@ -84,12 +82,12 @@ public class Signal extends GateSymbol {
     private ContextMenu contextMenu;
 
     /** Konštruktor pre paletku (ItemPicker). */
-    public Signal() {
+    public Label() {
         super();
     }
 
     /** Konštruktor pre umiestnenie na plochu - volaný reflexiou zo SchematicSheet. */
-    public Signal(SchematicSheet sheet) {
+    public Label(SchematicSheet sheet) {
         super(sheet);
         if (!getChildren().isEmpty()) {
             getChildren().remove(0);
@@ -110,7 +108,7 @@ public class Signal extends GateSymbol {
         Text text = new Text(getName());
         text.setLayoutY(text.getBoundsInLocal().getHeight());
 
-        Image image = new Image(getClass().getResourceAsStream("/icons/signal.png"));
+        Image image = new Image(getClass().getResourceAsStream("/icons/label.png"));
         ImageView view = new ImageView(image);
         view.setLayoutY(text.getBoundsInLocal().getHeight() + 5);
 
@@ -124,13 +122,15 @@ public class Signal extends GateSymbol {
     @Override
     protected List<Pin> createPins() {
         lead = new OutputPin(this, "S", 0, 0, side);
-        lead.getOwnedPotential().setType(PinType.WEAK_OUT);
+        // pasívny vývod - label nič nebudí, iba sa cez neviditeľný vodič spája s labelmi
+        // rovnakého mena (connectLabels)
+        lead.getOwnedPotential().setType(PinType.IN);
         return Collections.singletonList(lead);
     }
 
     @Override
     protected Pane drawBody() {
-        // Placeholder - skutočné telo sa vytvorí v konštruktore Signal(SchematicSheet)
+        // Placeholder - skutočné telo sa vytvorí v konštruktore Label(SchematicSheet)
         return new Pane();
     }
 
@@ -171,6 +171,9 @@ public class Signal extends GateSymbol {
         }
 
         Pane pane = new Pane(polygon, label);
+        // kliky iba na tele - neviditeľný obdĺžnik Pane (od 0,0) by pri tesnom umiestnení
+        // prekryl susednú súčiastku a zobral by jej klik
+        pane.setPickOnBounds(false);
         centerLabel();
         return pane;
     }
@@ -397,8 +400,8 @@ public class Signal extends GateSymbol {
 
         ObservableList<String> existing = FXCollections.observableArrayList();
         for (GateSymbol gate : sheet.getGates()) {
-            if (!(gate instanceof Signal)) continue;
-            Signal other = (Signal) gate;
+            if (!(gate instanceof Label)) continue;
+            Label other = (Label) gate;
             if (other == this) continue;
             String name = other.getSignalName();
             if (name != null && !name.isEmpty() && !existing.contains(name)) {
@@ -407,11 +410,11 @@ public class Signal extends GateSymbol {
         }
 
         Dialog<String> dialog = new Dialog<>();
-        dialog.setTitle("Názov signálu");
+        dialog.setTitle("Label signálu");
         dialog.setHeaderText(null);
         dialog.setResizable(false);
 
-        Label prompt = new Label("Meno signálu:");
+        javafx.scene.control.Label prompt = new javafx.scene.control.Label("Label:");
         ComboBox<String> comboBox = new ComboBox<>(existing);
         comboBox.setEditable(true);
         if (signalName != null) comboBox.setValue(signalName);
@@ -438,7 +441,7 @@ public class Signal extends GateSymbol {
     }
 
     /**
-     * Po položení signálu z paletky sa automaticky priradí jednoznačné meno Sxx.
+     * Po položení signálu z paletky sa automaticky priradí jednoznačné meno Lxx.
      */
     private void assignAutoName() {
         if (named || signalName != null && !signalName.isEmpty()) return;
@@ -446,9 +449,9 @@ public class Signal extends GateSymbol {
         if (sheet == null) return;
         boolean[] used = new boolean[100];
         for (GateSymbol gate : sheet.getGates()) {
-            if (!(gate instanceof Signal)) continue;
-            String name = ((Signal) gate).getSignalName();
-            if (name == null || name.length() != 3 || !name.startsWith("S")) continue;
+            if (!(gate instanceof Label)) continue;
+            String name = ((Label) gate).getSignalName();
+            if (name == null || name.length() != 3 || !name.startsWith("L")) continue;
             try {
                 int n = Integer.parseInt(name.substring(1));
                 if (n >= 0 && n < 100) used[n] = true;
@@ -457,12 +460,12 @@ public class Signal extends GateSymbol {
         }
         for (int i = 0; i < 100; i++) {
             if (!used[i]) {
-                applyLayout(String.format("S%02d", i), side);
+                applyLayout(String.format("L%02d", i), side);
                 named = true;
                 return;
             }
         }
-        applyLayout("S00", side);
+        applyLayout("L00", side);
         named = true;
     }
 
@@ -508,18 +511,46 @@ public class Signal extends GateSymbol {
 
     @Override
     public void simulate() {
-        if (signalName == null || signalName.isEmpty()) return;
+        // label nič nebudí - labely s rovnakým menom spájajú neviditeľné vodiče (connectLabels)
+    }
 
-        List<Signal> group = groupMembers();
-        Potential.Value value = groupValue(group);
-
-        Pin.PinState state;
-        switch (value) {
-            case HIGH: state = Pin.PinState.HIGH; break;
-            case LOW: state = Pin.PinState.LOW; break;
-            default: state = Pin.PinState.NOT_CONNECTED; break;
+    /**
+     * Neviditeľné vodiče medzi labelmi s rovnakým menom - vytvárajú sa pri zapnutí simulácie.
+     * Elektricky ide o to isté spojenie, aké vytvára vodič ({@link Potential} medzi dvoma
+     * vývodmi), len bez grafického vodiča: nie je medzi vodičmi plochy, nedá sa označiť,
+     * zvýrazniť ani zmazať a neukladá sa do schémy.
+     *
+     * @param gates súčiastky na ploche
+     * @return vytvorené spojenia v poradí vzniku (pre {@link #disconnectLabels})
+     */
+    public static List<Potential> connectLabels(List<GateSymbol> gates) {
+        Map<String, List<Label>> groups = new LinkedHashMap<>();
+        for (GateSymbol gate : gates) {
+            if (!(gate instanceof Label)) continue;
+            Label label = (Label) gate;
+            String name = label.getSignalName();
+            if (name == null || name.isEmpty()) continue;
+            groups.computeIfAbsent(name, k -> new ArrayList<>()).add(label);
         }
-        setPin(lead, state);
+
+        List<Potential> links = new ArrayList<>();
+        for (List<Label> group : groups.values()) {
+            for (int i = 1; i < group.size(); i++) {
+                links.add(new Potential(group.get(i - 1).lead, group.get(i).lead));
+            }
+        }
+        return links;
+    }
+
+    /**
+     * Odstránenie neviditeľných vodičov po vypnutí simulácie. Odpájajú sa v opačnom poradí,
+     * ako vznikli - každý je vtedy na vrchole stromu spojení a odpojením sa obnovia pôvodné
+     * siete (počas simulácie je editovanie zakázané, takže sa medzitým nemenili).
+     */
+    public static void disconnectLabels(List<Potential> links) {
+        for (int i = links.size() - 1; i >= 0; i--) {
+            links.get(i).detachAndNotify();
+        }
     }
 
     @Override
@@ -528,73 +559,6 @@ public class Signal extends GateSymbol {
             lead.setState(Pin.PinState.NOT_CONNECTED);
             // bez postChangeEvent - reset je len vizuálny/čistý stav, nepotrebujeme spúšťať simuláciu
         }
-    }
-
-    /**
-     * Všetky signály na ploche s rovnakým menom - tvoria jednu elektrickú skupinu.
-     */
-    private List<Signal> groupMembers() {
-        List<Signal> group = new ArrayList<>();
-        SchematicSheet sheet = getSheet();
-        if (sheet == null || signalName == null) return group;
-        for (GateSymbol gate : sheet.getGates()) {
-            if (!(gate instanceof Signal)) continue;
-            Signal other = (Signal) gate;
-            if (signalName.equals(other.getSignalName())) group.add(other);
-        }
-        return group;
-    }
-
-    /**
-     * Hodnota skupiny signálov s rovnakým menom. Určuje ju sieť, na ktorej je skutočný
-     * budič (výstup hradla alebo odbočka zbernice); ak budič nie je, signály zostávajú
-     * plávajúce. Pri dvoch rozporných budičoch je hodnota neurčitá.
-     */
-    private static Potential.Value groupValue(List<Signal> group) {
-        Potential.Value result = Potential.Value.NC;
-        for (Signal member : group) {
-            if (!member.hasForeignDriver(group)) continue;
-            Potential.Value value = member.netValue();
-            if (value == Potential.Value.NC) continue;
-            if (result == Potential.Value.NC) {
-                result = value;
-            } else if (result != value) {
-                return Potential.Value.NC;
-            }
-        }
-        return result;
-    }
-
-    /**
-     * Je na sieti vývodu cudzí budič (výstup hradla, odbočka zbernice)? Vlastné
-     * signály skupiny sa za budiče nepovažujú.
-     */
-    private boolean hasForeignDriver(List<Signal> group) {
-        Potential aggregate = lead.getPotential();
-        if (aggregate == null) return false;
-
-        List<Connectable> nodes = new ArrayList<>();
-        aggregate.getConnectedNodes(nodes);
-        for (Connectable node : nodes) {
-            if (!(node instanceof Pin)) continue;
-            Pin pin = (Pin) node;
-            Object owner = pin.getOwner();
-            if (owner instanceof Signal && group.contains(owner)) continue;
-            PinType type = pin.getOwnedPotential().getType();
-            if (type == PinType.OUT || type == PinType.IO
-                    || type == PinType.TRI_OUT || type == PinType.WEAK_OUT) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Aktuálna hodnota siete, na ktorej je vývod signálu.
-     */
-    private Potential.Value netValue() {
-        Potential aggregate = lead.getPotential();
-        return aggregate != null ? aggregate.getValue() : Potential.Value.NC;
     }
 
     // === rozmery a uloženie ===
@@ -642,11 +606,11 @@ public class Signal extends GateSymbol {
 
     @Override
     public String getName() {
-        return "SIG";
+        return "LAB";
     }
 
     @Override
     public String getShortDescription() {
-        return "Signál - pomenovaný bod siete; signály s rovnakým menom sú elektricky prepojené";
+        return "Label - pomenovaný bod siete; labely s rovnakým menom sú elektricky prepojené";
     }
 }

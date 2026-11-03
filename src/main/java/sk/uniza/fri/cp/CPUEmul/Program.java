@@ -88,19 +88,10 @@ public class Program {
 	 * @param obsBreakIndexes Zoznam s indexami riadkov, na ktorých je zavedený breakpoint.
 	 */
 	public void setListenerOnBreakpointsChange(ObservableSet<Integer> obsBreakIndexes){
-		//vycistenie zoznamu
-		breaks.clear();
 		//pridanie vsetkych aktualnych breakpointov
-		obsBreakIndexes.forEach(index ->
-				breaks.add(lineIndexToInstructionIndex.get(index)));
+		updateBreaks(obsBreakIndexes);
 
-		breakpointsListener = (change) -> {
-		    synchronized (this) { //FXThread meni, CPU cita
-                breaks.clear();
-                obsBreakIndexes.stream().filter((index) -> index >= 0).forEach(index ->
-                        breaks.add(lineIndexToInstructionIndex.get(index)));
-            }
-        };
+		breakpointsListener = (change) -> updateBreaks(obsBreakIndexes);
 
 		//registracia listenera na zmenu v breakpointoch
 		obsBreakIndexes.addListener(breakpointsListener);
@@ -111,6 +102,20 @@ public class Program {
      *
      * @param obsBreakIndexes Zoznam od ktorého sa má program odpojiť.
      */
+	/**
+	 * Prevod riadkov s breakpointom na indexy inštrukcií. Riadok bez inštrukcie v programe
+	 * (napr. pseudoinštrukcia BYTE) nemá index a vynechá sa - TreeSet null neprijme (NPE).
+	 */
+	private void updateBreaks(ObservableSet<Integer> obsBreakIndexes){
+		synchronized (this) { //FXThread meni, CPU cita
+			breaks.clear();
+			obsBreakIndexes.stream()
+					.map(lineIndexToInstructionIndex::get)
+					.filter(Objects::nonNull)
+					.forEach(breaks::add);
+		}
+	}
+
 	public void removeListenerOnBreakpointsChange(ObservableSet<Integer> obsBreakIndexes){
 		if(breakpointsListener != null)
 			obsBreakIndexes.removeListener(breakpointsListener);

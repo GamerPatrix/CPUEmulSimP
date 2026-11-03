@@ -249,7 +249,9 @@ public class Wire extends HighlightGroup {
     Color getCurrentColor() {
         if (!this.debugColored) return this.color;
         if (this.potential == null) return debugZColor;
-        switch (this.potential.getValue()) {
+        // hodnota celej siete (koreň stromu potenciálov) - vlastný potenciál vodiča pokrýva
+        // iba jeho podstrom, ktorý nemusí obsahovať budič (napr. vodič za labelom)
+        switch (this.potential.getPotential().getValue()) {
             case HIGH: return debugHighColor;
             case LOW: return debugLowColor;
             default: return debugZColor;

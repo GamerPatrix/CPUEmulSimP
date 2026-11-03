@@ -20,6 +20,7 @@ import java.util.regex.Pattern;
 public class Parser extends Task<Program>{
 
     private static final String LABEL_PATTERN = "^\\s*" + Regexes.rLabel + ":"; //identifikátor (nesmie začínať číslicou) a dvojbodka na začiatku riadku
+    private static final int MAX_INSTRUCTIONS = 65536; //PC je 16-bitovy bez znamienka: adresy 0..65535
     private static final String COMMENT_PATTERN = "(?m)(?:(?<!');|(?<=');(?!')).*$"; //vsetko za bodkociarkou po koniec riadku (okrem ';' ako znaku v uvodzovkach)
 
     //KOD
@@ -179,12 +180,14 @@ public class Parser extends Task<Program>{
                         if(label.matches("[iI][nN][tT].*")){
                             // Karpis - navestie musi byt int00 az int15
                             // alebo aj int00 az int0f
-                            if(label.matches("[iI][nN][tT]([0]\\d|[1][012345]|[0][abcdef])")){
+                            // (?i) v oboch vzoroch - napr. INT0a alebo int0A inak prešlo prvým
+                            // vzorom a padlo na parseInt("0a", 10) (NumberFormatException)
+                            if(label.matches("(?i)int(0\\p{XDigit}|1[0-5])")){
                                 //splna podmienky navestia pre prerusenie
                                 isInterruptLabel = true;
                                 int intNumber;
 
-                                if(label.matches("int0\\p{XDigit}")){
+                                if(label.matches("(?i)int0\\p{XDigit}")){
                                     // hexa
                                     intNumber = Integer.parseInt(label.substring(4,5), 16);
                                 } else {
@@ -234,6 +237,14 @@ public class Parser extends Task<Program>{
                     instructionParts.add(instructionMatcher.group());
                 }
 
+                //riadok bez jedineho tokenu (napr. iba ciarky alebo uvodzovky)
+                if(instructionParts.isEmpty()){
+                    addError("Neplatný riadok '" + line + "'", lineIndex);
+                    lineIndex++;
+                    line = br.readLine();
+                    continue;
+                }
+
                 //je instrukcia platna?
                 try {
                     enumInstructionsSet codeInstruction = enumInstructionsSet.valueOf(instructionParts.get(0).toUpperCase());
@@ -266,6 +277,12 @@ public class Parser extends Task<Program>{
                                 addError("Nesprávny druhý parameter inštrukcie '" + instructionParts.get(0) + "', povolený je iba reg. A", lineIndex);
                                 parametersError = true;
                             }
+                        }
+
+                        //PC je 16-bitovy (0..65535) - program moze mat najviac 65536 instrukcii (BYTE sa nepocita)
+                        if(!parametersError && codeInstruction != enumInstructionsSet.BYTE && instructions.size() >= MAX_INSTRUCTIONS){
+                            addError("Príliš veľa inštrukcií - maximálne " + MAX_INSTRUCTIONS + " (adresy 0 až " + (MAX_INSTRUCTIONS - 1) + ")", lineIndex);
+                            parametersError = true;
                         }
 
                         //ak je cela instrukcia aj s parametrami v poriadku, mozeme ju zaviest do programu (ak je aj chybny, kontroluje sa este spravnost navesti v instrukciach)

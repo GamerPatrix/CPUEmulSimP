@@ -19,12 +19,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Prioritný kóder 8 na 3 s povolovacím vstupom EI a aktívnymi dátovými vstupmi v 0 (low).
+ * Prioritný kóder 8 na 3 podľa obvodu 74148 - povolovací vstup EI, dátové vstupy aj
+ * všetky výstupy sú aktívne v 0 (low).
  * <p>
  * Pri EI=1 sú všetky výstupy (EO, GS, A0, A1, A2) v log. 1.
  * Pri EI=0 a žiadnej nule na dátových vstupoch je EO v 0 (ostatné v 1).
- * Pri EI=0 a aspoň jednej nule je GS v 0, EO v 1 a A2,A1,A0 predstavujú číslo
- * najnižšieho vstupu (s najmenším indexom), na ktorom je 0.
+ * Pri EI=0 a aspoň jednej nule je GS v 0, EO v 1 a A2,A1,A0 predstavujú v negovanom
+ * tvare číslo najvyššieho vstupu (prioritu má D7), na ktorom je 0 - napr. 0 na D7
+ * dá A2A1A0=000, 0 iba na D0 dá A2A1A0=111.
  *
  * @author Claude (návrh podľa SchematicSim architektúry, inšpirované Decoder38)
  */
@@ -157,16 +159,16 @@ public class Encoder83 extends GateSymbol {
             return;
         }
 
-        // pri EI=0 hľadáme najnižší vstup s 0
-        int lowest = -1;
-        for (int index = 0; index < 8; index++) {
+        // pri EI=0 hľadáme najvyšší vstup s 0 (prioritu má D7)
+        int highest = -1;
+        for (int index = 7; index >= 0; index--) {
             if (isLow(dataInputs[index])) {
-                lowest = index;
+                highest = index;
                 break;
             }
         }
 
-        if (lowest < 0) {
+        if (highest < 0) {
             // žiadna nula na dátových vstupoch: EO=0, ostatné 1
             setPin(outputEO, Pin.PinState.LOW);
             setPin(outputGS, Pin.PinState.HIGH);
@@ -176,9 +178,10 @@ public class Encoder83 extends GateSymbol {
         } else {
             setPin(outputEO, Pin.PinState.HIGH);
             setPin(outputGS, Pin.PinState.LOW);
-            setPin(outputA0, (lowest & 1) != 0 ? Pin.PinState.HIGH : Pin.PinState.LOW);
-            setPin(outputA1, (lowest & 2) != 0 ? Pin.PinState.HIGH : Pin.PinState.LOW);
-            setPin(outputA2, (lowest & 4) != 0 ? Pin.PinState.HIGH : Pin.PinState.LOW);
+            // výstupy sú aktívne v 0 - číslo vstupu v negovanom tvare
+            setPin(outputA0, (highest & 1) != 0 ? Pin.PinState.LOW : Pin.PinState.HIGH);
+            setPin(outputA1, (highest & 2) != 0 ? Pin.PinState.LOW : Pin.PinState.HIGH);
+            setPin(outputA2, (highest & 4) != 0 ? Pin.PinState.LOW : Pin.PinState.HIGH);
         }
     }
 
@@ -213,6 +216,6 @@ public class Encoder83 extends GateSymbol {
 
     @Override
     public String getShortDescription() {
-        return "Prioritný kóder 8→3 - EI=0: na A2A1A0 číslo najnižšieho vstupu s 0 (GS=0); bez nuly EO=0; EI=1 dá všetky výstupy do 1";
+        return "Prioritný kóder 8→3 (74148) - EI=0: na A2A1A0 negované číslo najvyššieho vstupu s 0 (GS=0); bez nuly EO=0; EI=1 dá všetky výstupy do 1";
     }
 }

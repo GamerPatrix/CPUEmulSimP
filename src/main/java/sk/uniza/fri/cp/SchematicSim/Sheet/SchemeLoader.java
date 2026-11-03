@@ -9,6 +9,7 @@ import org.jdom2.input.SAXBuilder;
 import org.jdom2.output.Format;
 import org.jdom2.output.XMLOutputter;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
+import sk.uniza.fri.cp.SchematicSim.Gates.Label;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
 import sk.uniza.fri.cp.SchematicSim.Wire.WireEnd;
@@ -43,6 +44,7 @@ public class SchemeLoader {
 
     private static final String VERSION = "2.0";
     private static final String FORGIVEN_ID_PREFIX = "s"; // id pouzite pri nacitani ak chyba ulozene id
+    private static final String LEGACY_SIGNAL_CLASS = "sk.uniza.fri.cp.SchematicSim.Gates.Signal"; // povodny nazov triedy Label
 
     /** Tolerancia zhodnosti bodov - vodiče sa spájajú len na presne rovnakom bode. */
     private static final double POINT_EPS = 0.5;
@@ -228,6 +230,8 @@ public class SchemeLoader {
             if (gatesElement != null) {
                 for (Element gateElement : gatesElement.getChildren("Gate")) {
                     String className = gateElement.getChildText("class");
+                    // súčiastka Signal bola premenovaná na Label - staré schémy sa načítajú ďalej
+                    if (LEGACY_SIGNAL_CLASS.equals(className)) className = Label.class.getName();
                     GateSymbol gate = (GateSymbol) Class.forName(className)
                             .getConstructor(SchematicSheet.class).newInstance(sheet);
 

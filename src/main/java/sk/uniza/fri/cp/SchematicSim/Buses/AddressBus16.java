@@ -686,6 +686,14 @@ public class AddressBus16 extends BusSymbol {
     }
 
     @Override
+    public void delete() {
+        // zbernica CPU je singleton - bez odhlásenia by zmazaná zbernica (aj každá
+        // inštancia nahradená pri undo/redo či načítaní súboru) ďalej reagovala na CPU
+        getBus().addressBusProperty().removeListener(onAddressBusChange);
+        super.delete();
+    }
+
+    @Override
     public int getGridWidth() {
         return RAIL_WIDTH;
     }

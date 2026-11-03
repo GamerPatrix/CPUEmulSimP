@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Potenciál medzi dvoma bodmi siete (Pin alebo Joint). Prepájanie bodov potenciálom
@@ -35,6 +36,9 @@ public class Potential {
     private boolean shortCircuit;
     private final LinkedList<Connectable> shortedNodes;
     private final List<Runnable> valueListeners = new ArrayList<>();
+
+    /** Počet zaregistrovaných poslucháčov (farby vodičov v debug režime) vo všetkých potenciáloch. */
+    private static final AtomicInteger listenerCount = new AtomicInteger();
 
     public Potential(Connectable node1, Connectable node2) {
         this.shortedNodes = new LinkedList<>();
@@ -130,10 +134,36 @@ public class Potential {
 
     public synchronized void addValueListener(Runnable listener) {
         valueListeners.add(listener);
+        listenerCount.incrementAndGet();
     }
 
     public synchronized void removeValueListener(Runnable listener) {
-        valueListeners.remove(listener);
+        if (valueListeners.remove(listener)) listenerCount.decrementAndGet();
+    }
+
+    /**
+     * Upozornenie poslucháčov v celom strome pod týmto potenciálom. Hodnota celej siete je
+     * iba v koreni stromu - vodič, ktorého podstrom nemá budič (napr. za labelom spojeným
+     * neviditeľným vodičom), má vlastnú hodnotu NC, no farbí sa podľa koreňa, a preto musí
+     * vedieť aj o zmene koreňa. Bez poslucháčov (debug farby vypnuté) sa strom neprechádza.
+     */
+    public void notifyTreeListeners() {
+        if (listenerCount.get() == 0) return;
+        notifyValueListeners();
+        if (this.parent1 != null) this.parent1.notifyTreeListeners();
+        if (this.parent2 != null) this.parent2.notifyTreeListeners();
+    }
+
+    /**
+     * Odpojenie ako {@link #detach()}, po ktorom sa obnovia poslucháči stromov bývalých
+     * predkov - ich koreňom je odteraz každý predok sám (napr. odstránenie neviditeľného vodiča).
+     */
+    public void detachAndNotify() {
+        Potential former1 = this.parent1;
+        Potential former2 = this.parent2;
+        detach();
+        if (former1 != null) former1.notifyTreeListeners();
+        if (former2 != null) former2.notifyTreeListeners();
     }
 
     private void notifyValueListeners() {
@@ -221,6 +251,9 @@ public class Potential {
         notifyValueListeners();
 
         if (this.child != null) return this.child.setValue(this.value);
+
+        // koreň stromu - zmena hodnoty siete sa týka aj vodičov mimo cesty k listu
+        notifyTreeListeners();
 
         return !this.shortCircuit;
     }

@@ -116,7 +116,12 @@ public class Input extends GateSymbol {
         valueText.setMouseTransparent(true);
         valueText.setLayoutX(w / 2.0 - valueText.getBoundsInLocal().getWidth() / 2.0);
 
-        return new Pane(button, valueText);
+        Pane body = new Pane(button, valueText);
+        // Pane predvolene zachytáva kliky v celom svojom obdĺžniku (od 0,0 po štvorček) - neviditeľná
+        // časť by pri tesne umiestnených prepínačoch prekryla štvorček suseda a klik by namiesto
+        // prepnutia vybral suseda. Kliky zachytáva iba samotný štvorček.
+        body.setPickOnBounds(false);
+        return body;
     }
 
     private void showPlacementMenu(double screenX, double screenY) {

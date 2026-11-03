@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit;
 public class Bus{
 	private static Bus instance; //inštancia singletonu
     private Semaphore dataSemaphore; //semafor pre cakanie na nastavenie dat simulatorom
-    private boolean isSimulationRunning; //je spustena simulacia?
+    private volatile boolean isSimulationRunning; //je spustena simulacia?
 
 	private IntegerProperty addressBus;
 	private IntegerProperty dataBus;
@@ -273,7 +273,30 @@ public class Bus{
      * @param isRunning Stav simulácie, true ak je spustená, false inak.
      */
     public void simulationIsRunning(boolean isRunning) {
-        this.isSimulationRunning = isRunning;
+        synchronized (steadyMonitor) {
+            this.isSimulationRunning = isRunning;
+            steadyMonitor.notifyAll();
+        }
+    }
+
+    /**
+     * Čakanie, kým sa spustí simulácia (po jej zapnutí sa simulačné vlákno rozbieha asynchrónne).
+     * Nahrádza pevné uspanie GUI vlákna pri štarte programu.
+     *
+     * @param timeoutMs Maximálny čas čakania v ms.
+     * @return True ak simulácia beží, false ak sa v danom čase nespustila.
+     * @throws InterruptedException Prerušenie počas čakania (napr. Stop).
+     */
+    public boolean waitForSimulationStart(long timeoutMs) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        synchronized (steadyMonitor) {
+            while (!isSimulationRunning) {
+                long rest = deadline - System.currentTimeMillis();
+                if (rest <= 0) return false;
+                steadyMonitor.wait(rest);
+            }
+            return true;
+        }
     }
 
     /**
@@ -328,7 +351,7 @@ public class Bus{
      *
      * @param IT Nová hodnota signálu IT.
      */
-    public void setIT(boolean IT) {
+    synchronized public void setIT(boolean IT) {
         mapToControlBus("IT", IT);
     }
 
@@ -337,7 +360,7 @@ public class Bus{
      *
      * @param RY Nová hodnota signálu RY.
      */
-    public void setRY(boolean RY) {
+    synchronized public void setRY(boolean RY) {
         mapToControlBus("RY", RY);
     }
 

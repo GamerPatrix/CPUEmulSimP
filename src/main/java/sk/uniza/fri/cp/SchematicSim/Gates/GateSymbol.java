@@ -258,14 +258,18 @@ public abstract class GateSymbol extends Item {
 
     @Override
     public void delete() {
-        super.delete();
         // pri zmazaní súčiastky sa zmažú aj všetky na jej piny pripojené vodiče
         // (narozdiel od Socket.disconnect() v origináli tu niet samostatného komponentu,
-        // na ktorom by mohol "osirelý" vodič ostať visieť)
+        // na ktorom by mohol "osirelý" vodič ostať visieť).
+        // Vodiče sa mažú ešte PRED odobratím súčiastky z plochy: odobratím sa zmení jej
+        // transformácia a konce vodičov na jej pinoch by sa prepočítali na polohu mimo
+        // plochy (posun o pol hrúbky obrysu) - posunuli by sa aj pripojené spájače a
+        // susedné vodiče by ostali mimo mriežky.
         if (pins != null) {
             for (Pin pin : pins) {
                 if (pin.getWireEnd() != null) pin.getWireEnd().getWire().delete();
             }
         }
+        super.delete();
     }
 }

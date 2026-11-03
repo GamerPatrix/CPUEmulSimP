@@ -44,7 +44,6 @@ import sk.uniza.fri.cp.SchematicSim.Gates.SevenSegmentDisplay;
 import sk.uniza.fri.cp.SchematicSim.Gates.PushButton;
 import sk.uniza.fri.cp.SchematicSim.Gates.MatrixKeyboard;
 import sk.uniza.fri.cp.SchematicSim.Gates.Register8;
-import sk.uniza.fri.cp.SchematicSim.Gates.Signal;
 import sk.uniza.fri.cp.SchematicSim.Gates.Input;
 import sk.uniza.fri.cp.SchematicSim.ItemPicker;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchemeLoader;
@@ -107,6 +106,9 @@ public class SchematicController {
         //rozloženie okna
         SplitPane editableArea = new SplitPane(this.itemPicker, this.sheet);
         editableArea.setDividerPositions(0.13);
+        // pri zmene veľkosti okna si paletka drží šírku (mení sa iba plocha schémy);
+        // ručne sa dá šírka paletky stále meniť ťahaním deliacej čiary
+        SplitPane.setResizableWithParent(this.itemPicker, false);
         this.editableArea = editableArea;
 
         this.root = new BorderPane();
@@ -183,7 +185,7 @@ public class SchematicController {
         picker.registerItem(new ControlBus());
 
         //pomenované signály (prepojenie signálov s rovnakým menom)
-        picker.registerItem(new Signal());
+        picker.registerItem(new sk.uniza.fri.cp.SchematicSim.Gates.Label()); // plné meno - javafx Label je importovaný
 
         //zariadenia komunikujúce so zbernicou CPU
         picker.registerItem(new Input());

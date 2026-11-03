@@ -1214,7 +1214,18 @@ public class CPUController implements Initializable {
         parserTask.setOnFailed(new EventHandler<WorkerStateEvent>() {
             @Override
             public void handle(WorkerStateEvent event) {
-                InvalidCodeLinesException ex = (InvalidCodeLinesException) parserTask.getException();
+                Throwable failure = parserTask.getException();
+                program = null;
+                updateGUITableProgMemory();
+                lbStatus.setText("Chyba v kóde");
+
+                //neočakávaná chyba parsera - nesmie spadnúť na pretypovaní a ostať bez hlásenia
+                if(!(failure instanceof InvalidCodeLinesException)){
+                    if(failure != null) failure.printStackTrace(System.err);
+                    writeConsoleLn("[Parser] Neočakávaná chyba pri spracovaní kódu: " + failure, "red");
+                    return;
+                }
+                InvalidCodeLinesException ex = (InvalidCodeLinesException) failure;
 
                 //zvyraznenie riadkov s chybovym kodom
                 for (int line :
@@ -1227,12 +1238,6 @@ public class CPUController implements Initializable {
                         ex.getErrors()) {
                     writeConsoleLn("[Parser] " + msg, "red");
                 }
-
-                program = null;
-                updateGUITableProgMemory();
-
-                //zobrazenie stavu
-                lbStatus.setText("Chyba v kóde");
             }
         });
 
@@ -1264,17 +1269,9 @@ public class CPUController implements Initializable {
     private void startExecution(){
         //ak cpu bezi
         if(this.cpu != null && this.cpu.isAlive()){
-            if (this.program.hasIOInstruction()) {
-                boolean wasRunning = schematicSheet.isSimulationRunning();
-                schematicSheet.powerOn();
-                if (!wasRunning)
-                    //ak bola simulacia vypnuta, pockaj chvilu na zahriatie
-                    try {
-                        Thread.sleep(100);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-            }
+            //na rozbehnutie simulacie caka CPU vo svojom vlakne (Bus.waitForSimulationStart),
+            //GUI vlakno sa neuspava
+            if (this.program.hasIOInstruction()) schematicSheet.powerOn();
 
             this.cos_cpu.setUnused();
             this.cpu.reset();
@@ -1353,7 +1350,7 @@ public class CPUController implements Initializable {
     private void onCPUPaused() {
         f_paused.setValue(true);
 
-        updateExecutionLine( program.getLineOfInstruction(cpu.getRegPC()-1) );
+        updateExecutionLine( program.getLineOfInstruction(cpu.getCurrentInstructionAddress()) );
 
         progressBar.progressProperty().unbind();
         progressBar.setProgress(0.5);
@@ -1377,7 +1374,7 @@ public class CPUController implements Initializable {
     private void onCPUWaiting(){
         f_paused.setValue(true);
 
-        updateExecutionLine( program.getLineOfInstruction(cpu.getRegPC()-1) );
+        updateExecutionLine( program.getLineOfInstruction(cpu.getCurrentInstructionAddress()) );
 
         progressBar.progressProperty().unbind();
         progressBar.setProgress(0.5);

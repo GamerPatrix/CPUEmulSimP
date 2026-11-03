@@ -14,7 +14,7 @@ import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 import sk.uniza.fri.cp.SchematicSim.ContextMenuHelper;
 import sk.uniza.fri.cp.SchematicSim.Pin.InputPin;
-import sk.uniza.fri.cp.SchematicSim.Pin.OutputPin;
+import sk.uniza.fri.cp.SchematicSim.Pin.TriStateOutputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Side;
@@ -163,9 +163,9 @@ public class Register8 extends GateSymbol {
         pins.add(pinLE);
 
         // pravy okraj: výstupy (tri-state)
-        outputPins = new OutputPin[8];
+        outputPins = new TriStateOutputPin[8];
         for (int index = 0; index < 8; index++) {
-            outputPins[index] = new OutputPin(this, "Q" + index, GRID_WIDTH, index + 1, Side.RIGHT);
+            outputPins[index] = new TriStateOutputPin(this, "Q" + index, GRID_WIDTH, index + 1, Side.RIGHT);
             pins.add(outputPins[index]);
         }
 
