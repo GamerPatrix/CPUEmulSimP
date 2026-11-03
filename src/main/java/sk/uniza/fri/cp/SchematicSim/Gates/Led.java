@@ -13,6 +13,8 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
+import javafx.scene.shape.Rectangle;
+import javafx.scene.shape.Shape;
 import javafx.scene.text.Text;
 import sk.uniza.fri.cp.SchematicSim.ContextMenuHelper;
 import sk.uniza.fri.cp.SchematicSim.Pin.InputPin;
@@ -50,7 +52,8 @@ public class Led extends GateSymbol {
         return t;
     });
 
-    private static final Color LED_OFF = Color.DARKGRAY;
+    // rovnaká bledosivá ako nesvietiaci segment displeja
+    private static final Color LED_OFF = Color.rgb(220, 220, 220);
 
     private static final Map<String, Color> LED_COLORS = new LinkedHashMap<>();
     static {
@@ -62,7 +65,11 @@ public class Led extends GateSymbol {
     }
 
     private Pin pinIn;
-    private Circle light;
+    // tvar LED - kruh (predvolený) alebo štvorec ako pri prepínači; viditeľný je len jeden
+    private Circle circle;
+    private Rectangle square;
+    private Shape light;
+    private boolean squareShape = false;
     private ContextMenu contextMenu;
 
     private volatile boolean on = false;
@@ -108,30 +115,52 @@ public class Led extends GateSymbol {
         double w = getGridWidth() * cell;
         double h = getGridHeight() * cell;
 
-        light = new Circle(w / 2.0, h / 2.0, cell * 0.55, LED_OFF);
-        light.setStroke(Color.BLACK);
-        light.setStrokeWidth(3);
+        circle = new Circle(w / 2.0, h / 2.0, cell * 0.55, LED_OFF);
+        circle.setStroke(Color.BLACK);
+        circle.setStrokeWidth(3);
+        installMenuHandlers(circle);
+
+        // štvorec rovnakej veľkosti ako tlačidlo prepínača (Input)
+        double size = cell * 0.9;
+        square = new Rectangle(w / 2.0 - size / 2.0, h / 2.0 - size / 2.0, size, size);
+        square.setFill(LED_OFF);
+        square.setStroke(Color.BLACK);
+        square.setStrokeWidth(2);
+        installMenuHandlers(square);
+
+        Pane body = new Pane(circle, square);
+        // kliky iba na tvare LED - neviditeľný obdĺžnik Pane (od 0,0) by pri tesnom umiestnení
+        // prekryl susednú súčiastku (napr. prepínač) a zobral by jej klik
+        body.setPickOnBounds(false);
+        applyShape();
+        return body;
+    }
+
+    private void installMenuHandlers(Shape shape) {
         // menu sa otvára na pravom tlačidle myši; MOUSE_PRESSED je spoľahlivejší ako
         // CONTEXT_MENU_REQUESTED (ten sa negeneruje, ak pravý stlač počas cesty niekto skonzumuje)
-        light.setOnMousePressed(event -> {
+        shape.setOnMousePressed(event -> {
             if (event.getButton() == MouseButton.SECONDARY) {
                 if (getSheet() != null && getSheet().isEditingEnabled()) showMenu(event.getScreenX(), event.getScreenY());
                 event.consume();
             }
         });
-        light.setOnContextMenuRequested(event -> {
+        shape.setOnContextMenuRequested(event -> {
             if (getSheet() == null || !getSheet().isEditingEnabled()) return;
             if (contextMenu == null || !contextMenu.isShowing()) {
                 showMenu(event.getScreenX(), event.getScreenY());
             }
             event.consume();
         });
+    }
 
-        Pane body = new Pane(light);
-        // kliky iba na krúžku - neviditeľný obdĺžnik Pane (od 0,0) by pri tesnom umiestnení
-        // prekryl susednú súčiastku (napr. prepínač) a zobral by jej klik
-        body.setPickOnBounds(false);
-        return body;
+    /** Zobrazí zvolený tvar LED a druhý skryje (skrytý tvar nezachytáva ani kliky). */
+    private void applyShape() {
+        if (circle == null) return;
+        light = squareShape ? square : circle;
+        circle.setVisible(!squareShape);
+        square.setVisible(squareShape);
+        light.setFill(on ? ledColor : LED_OFF);
     }
 
     private void showMenu(double screenX, double screenY) {
@@ -145,18 +174,29 @@ public class Led extends GateSymbol {
 
             Menu colorMenu = new Menu("Farba LED");
             ToggleGroup colorGroup = new ToggleGroup();
-            RadioMenuItem firstColor = null;
             for (Map.Entry<String, Color> entry : LED_COLORS.entrySet()) {
                 RadioMenuItem item = new RadioMenuItem(entry.getKey());
                 item.setToggleGroup(colorGroup);
                 item.setUserData(entry.getValue());
                 item.setOnAction(e -> setColor((Color) item.getUserData()));
+                // označená je aktuálna farba LED (napr. načítaná zo schémy), nie vždy prvá
+                item.setSelected(entry.getValue().equals(ledColor));
                 colorMenu.getItems().add(item);
-                if (firstColor == null) firstColor = item;
             }
-            if (firstColor != null) firstColor.setSelected(true);
 
-            contextMenu = new ContextMenu(placement, new SeparatorMenuItem(), colorMenu);
+            Menu shapeMenu = new Menu("Tvar");
+            ToggleGroup shapeGroup = new ToggleGroup();
+            RadioMenuItem circleItem = new RadioMenuItem("Kruh");
+            circleItem.setToggleGroup(shapeGroup);
+            circleItem.setSelected(!squareShape);
+            circleItem.setOnAction(e -> setSquareShape(false));
+            RadioMenuItem squareItem = new RadioMenuItem("Štvorec");
+            squareItem.setToggleGroup(shapeGroup);
+            squareItem.setSelected(squareShape);
+            squareItem.setOnAction(e -> setSquareShape(true));
+            shapeMenu.getItems().addAll(circleItem, squareItem);
+
+            contextMenu = new ContextMenu(placement, new SeparatorMenuItem(), colorMenu, shapeMenu);
         }
         ContextMenuHelper.show(contextMenu, light, screenX, screenY);
     }
@@ -272,6 +312,18 @@ public class Led extends GateSymbol {
         });
     }
 
+    public boolean isSquareShape() {
+        return squareShape;
+    }
+
+    /**
+     * Nastavenie tvaru LED - štvorec (true) alebo kruh (false), ekvivalent voľby v kontextovom menu.
+     */
+    public void setSquareShape(boolean square) {
+        squareShape = square;
+        applyShape();
+    }
+
     public boolean isLit() {
         return on;
     }
@@ -297,6 +349,7 @@ public class Led extends GateSymbol {
         Map<String, String> properties = new LinkedHashMap<>();
         properties.put("color", toHex(ledColor));
         properties.put("pinSide", pinIn.getExitSide().name());
+        properties.put("shape", squareShape ? "square" : "circle");
         return properties;
     }
 
@@ -315,6 +368,9 @@ public class Led extends GateSymbol {
             } catch (IllegalArgumentException ignored) {
             }
         }
+
+        // staré schémy vlastnosť nemajú - ostane kruh
+        setSquareShape("square".equals(properties.get("shape")));
     }
 
     private static String toHex(Color color) {
@@ -341,6 +397,6 @@ public class Led extends GateSymbol {
 
     @Override
     public String getShortDescription() {
-        return "LED dióda - svieti pri logickej 1; pravým tlačidlom zvoľ umiestnenie vývodu a farbu";
+        return "LED dióda - svieti pri logickej 1; pravým tlačidlom zvoľ umiestnenie vývodu, farbu a tvar";
     }
 }
