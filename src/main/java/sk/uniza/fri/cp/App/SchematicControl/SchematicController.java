@@ -380,6 +380,16 @@ public class SchematicController {
                     this.btnF12reset.fire();
                     event.consume();
                     break;
+                case UP:
+                case DOWN:
+                case LEFT:
+                case RIGHT:
+                    // šípky pre CPU (scall key) ako v okne CPU - nemajú KEY_TYPED udalosť
+                    if (this.cpuController.isExecuting()) {
+                        this.cpuController.keyboardInput(event);
+                        event.consume();
+                    }
+                    break;
                 default:
                     break;
             }
