@@ -31,6 +31,9 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 7-segmentový displej. Má 9 vstupov - A až G (segmenty), DP (desatinná bodka) a
@@ -52,6 +55,13 @@ public class SevenSegmentDisplay extends GateSymbol {
     private static final int GRID_HEIGHT = 10;
     private static final int SEGMENT_COUNT = 8;
     private static final long CA_HOLD_MS = 100L;
+
+    /** Spoločné vlákno na zhasnutie displeja po uplynutí doby dosvietenia po deaktivácii CA. */
+    private static final ScheduledExecutorService HOLD_TIMER = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "7seg-hold");
+        t.setDaemon(true);
+        return t;
+    });
 
     private static final Color SEGMENT_OFF = Color.rgb(220, 220, 220);
     private static final Color SEGMENT_UNPOWERED = Color.rgb(120, 120, 120);
@@ -263,7 +273,7 @@ public class SevenSegmentDisplay extends GateSymbol {
     }
 
     @Override
-    public void simulate() {
+    public synchronized void simulate() {
         long now = System.currentTimeMillis();
         boolean caEnabled = isLow(caPin); // CA=LOW => displej aktivovaný
 
@@ -291,6 +301,8 @@ public class SevenSegmentDisplay extends GateSymbol {
             holdSnapshot = Arrays.copyOf(litSegments, SEGMENT_COUNT);
             powered = true;
             applyLitState(holdSnapshot, true);
+            // simulate() sa uz nemusi zavolat (vstupy sa nezmenia) - zhasnutie po uplynuti doby
+            HOLD_TIMER.schedule(this::holdExpired, CA_HOLD_MS, TimeUnit.MILLISECONDS);
             return;
         }
 
@@ -307,6 +319,19 @@ public class SevenSegmentDisplay extends GateSymbol {
         }
 
         // Po timeoute ostane displej vypnutý, kým sa CA nevráti na LOW.
+        powered = false;
+        applyLitState(new boolean[SEGMENT_COUNT], true);
+    }
+
+    /** Uplynula doba dosvietenia - ak CA medzitým neaktivovali, displej zhasne. */
+    private synchronized void holdExpired() {
+        if (!caHoldActive) return;
+        long remaining = caHoldDeadlineMs - System.currentTimeMillis();
+        if (remaining > 0) {
+            HOLD_TIMER.schedule(this::holdExpired, remaining, TimeUnit.MILLISECONDS);
+            return;
+        }
+        caHoldActive = false;
         powered = false;
         applyLitState(new boolean[SEGMENT_COUNT], true);
     }
@@ -328,7 +353,7 @@ public class SevenSegmentDisplay extends GateSymbol {
     }
 
     @Override
-    public void reset() {
+    public synchronized void reset() {
         for (Pin pin : getPins()) {
             setPinForce(pin, Pin.PinState.NOT_CONNECTED);
         }
