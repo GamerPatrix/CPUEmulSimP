@@ -24,6 +24,9 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Samostatná LED dióda - obyčajný farebný kruh s jedným prípojným bodom {@code IN}.
@@ -39,6 +42,13 @@ public class Led extends GateSymbol {
     private static final int GRID_WIDTH = 2;
     private static final int GRID_HEIGHT = 2;
     private static final long INPUT_HOLD_MS = 100L;
+
+    /** Spoločné vlákno na zhasnutie LED po uplynutí minimálnej doby svietenia. */
+    private static final ScheduledExecutorService HOLD_TIMER = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "Led-hold");
+        t.setDaemon(true);
+        return t;
+    });
 
     private static final Color LED_OFF = Color.DARKGRAY;
 
@@ -193,7 +203,7 @@ public class Led extends GateSymbol {
     }
 
     @Override
-    public void simulate() {
+    public synchronized void simulate() {
         long now = System.currentTimeMillis();
         boolean high = isHigh(pinIn);
         applyInputState(high, now);
@@ -219,9 +229,16 @@ public class Led extends GateSymbol {
 
         if (on && now - litSinceMs < INPUT_HOLD_MS) {
             setLitState(true);
+            // simulate() sa uz nemusi zavolat (vstup sa nezmeni) - zhasnutie po uplynuti doby
+            HOLD_TIMER.schedule(this::holdExpired, litSinceMs + INPUT_HOLD_MS - now, TimeUnit.MILLISECONDS);
         } else {
             setLitState(false);
         }
+    }
+
+    /** Uplynula minimálna doba svietenia - ak je vstup stále LOW, LED zhasne. */
+    private synchronized void holdExpired() {
+        if (!wasHigh) applyInputState(false, System.currentTimeMillis());
     }
 
     private void setLitState(boolean lit) {
@@ -232,7 +249,7 @@ public class Led extends GateSymbol {
     }
 
     @Override
-    public void reset() {
+    public synchronized void reset() {
         if (pinIn != null) setPinForce(pinIn, Pin.PinState.NOT_CONNECTED);
         wasHigh = false;
         litSinceMs = 0L;
