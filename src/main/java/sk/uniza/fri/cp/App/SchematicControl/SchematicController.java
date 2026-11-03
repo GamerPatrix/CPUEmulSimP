@@ -433,6 +433,22 @@ public class SchematicController {
         File file = chooser.showOpenDialog(this.root.getScene().getWindow());
         if (file == null) return;
 
+        loadSchemeFile(file);
+    }
+
+    /**
+     * Otvorenie schémy zadanej zvonka (parameter príkazového riadku - dvojklik na .schx súbor).
+     * Pri neuloženej schéme sa užívateľ opýta.
+     *
+     * @param file Súbor so schémou
+     * @return true ak sa schéma načítala
+     */
+    public boolean openSchemeFile(File file) {
+        if (!continueIfUnsavedFile()) return false;
+        return loadSchemeFile(file);
+    }
+
+    private boolean loadSchemeFile(File file) {
         if (this.sheet.isSimulationRunning()) {
             this.sheet.powerOff();
         }
@@ -442,7 +458,9 @@ public class SchematicController {
             currentFile = file;
             sheet.clearChange();
             sheet.resetUndoHistory();
+            return true;
         }
+        return false;
     }
 
     /**

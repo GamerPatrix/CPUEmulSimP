@@ -6,12 +6,20 @@ import javafx.event.EventHandler;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonType;
 import javafx.scene.image.Image;
 import javafx.scene.input.KeyEvent;
 import javafx.stage.Stage;
 import sk.uniza.fri.cp.App.CPUControl.CPUController;
 import sk.uniza.fri.cp.App.SchematicControl.SchematicController;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
+
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Aplikácia simulátora vývojovej dosky FRI UNIZA a emulátor 8 bitového CPU.
@@ -27,7 +35,19 @@ public class App extends Application {
     public static final String WINDOW_TITLE = "CPU Emulator v. " + PROGRAM_VERSION;
 
     public static void main(String[] args) {
-        launch();
+        // dvojklik na .asm/.schx súbor - ak program už beží, súbor sa otvorí v ňom
+        List<File> files = filesFromArgs(Arrays.asList(args));
+        // System.exit - JavaFX launcher (main trieda je Application) už má spustené vlákna, return nestačí
+        if (!files.isEmpty() && SingleInstance.sendToRunningInstance(files)) System.exit(0);
+        launch(args);
+    }
+
+    private static List<File> filesFromArgs(List<String> args) {
+        List<File> files = new ArrayList<>();
+        for (String arg : args) {
+            if (!arg.startsWith("-")) files.add(new File(arg).getAbsoluteFile());
+        }
+        return files;
     }
     public static Stage primStage;
 
@@ -120,5 +140,33 @@ public class App extends Application {
         CpuLayoutLoader.<CPUController>getController().setSchematicStage(schematicStage);
         CpuLayoutLoader.<CPUController>getController().setSchematicSheet(schematicController.getSheet());
         CpuLayoutLoader.<CPUController>getController().setSchematicController(schematicController);
+
+        // otváranie súborov z príkazového riadku a od ďalších spustení programu
+        CPUController cpuController = CpuLayoutLoader.getController();
+        Consumer<File> opener = file -> openFile(file, primaryStage, cpuController, schematicController);
+        filesFromArgs(getParameters().getRaw()).forEach(opener);
+        SingleInstance.listen(opener);
+    }
+
+    /**
+     * Otvorenie súboru podľa prípony - .schx v simulátore, ostatné (.asm, .txt) ako kód programu.
+     */
+    private static void openFile(File file, Stage cpuStage, CPUController cpuController,
+                                 SchematicController schematicController) {
+        if (!file.isFile()) {
+            Alert alert = new Alert(Alert.AlertType.ERROR, "Súbor neexistuje:\n" + file, ButtonType.OK);
+            alert.initOwner(cpuStage);
+            alert.showAndWait();
+            return;
+        }
+
+        if (file.getName().toLowerCase().endsWith(".schx")) {
+            cpuController.showSchematicStage();
+            schematicController.openSchemeFile(file);
+        } else {
+            if (cpuStage.isIconified()) cpuStage.setIconified(false);
+            cpuStage.toFront();
+            cpuController.openCodeFile(file);
+        }
     }
 }

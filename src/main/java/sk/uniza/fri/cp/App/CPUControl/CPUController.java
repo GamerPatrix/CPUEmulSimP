@@ -842,26 +842,41 @@ public class CPUController implements Initializable {
 
         File file = chooser.showOpenDialog(btnLoadCode.getScene().getWindow());
 
-        if(file != null)
-            try (BufferedReader br = new BufferedReader(new InputStreamReader(
-                    new FileInputStream(file), StandardCharsets.UTF_8))) {
-                codeEditor.clear();
-                StringBuilder sb = new StringBuilder();
-                br.lines().forEach(line -> {
-                    sb.append(line + "\n");
-                });
-                codeEditor.appendText(sb.toString());
-                currentFile = file;
-                titPaneCode.setText("Kód - " + currentFile.getName());
-                fileSaved = true;
-                // nazov suboru do nazvu aplikacie
-                primStage.setTitle("CPU Emulator - " + currentFile.getName());
+        if(file != null) loadCodeFile(file);
+    }
 
-            } catch (FileNotFoundException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+    /**
+     * Otvorenie súboru s kódom zadaného zvonka (parameter príkazového riadku - dvojklik na .asm súbor).
+     * Ak beží program, zastaví sa; pri neuloženom kóde sa užívateľ opýta.
+     *
+     * @param file Súbor s kódom
+     */
+    public void openCodeFile(File file) {
+        if (isExecuting()) handleButtonStopAction();
+        if(!fileSaved && !continueIfUnsavedFile()) return;
+        loadCodeFile(file);
+    }
+
+    private void loadCodeFile(File file) {
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(
+                new FileInputStream(file), StandardCharsets.UTF_8))) {
+            codeEditor.clear();
+            StringBuilder sb = new StringBuilder();
+            br.lines().forEach(line -> {
+                sb.append(line + "\n");
+            });
+            codeEditor.appendText(sb.toString());
+            currentFile = file;
+            titPaneCode.setText("Kód - " + currentFile.getName());
+            fileSaved = true;
+            // nazov suboru do nazvu aplikacie
+            primStage.setTitle("CPU Emulator - " + currentFile.getName());
+
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     /**
@@ -1115,6 +1130,14 @@ public class CPUController implements Initializable {
         } else {
             schematicStage.show();
         }
+    }
+
+    /**
+     * Zobrazenie okna simulátora (napr. po otvorení schémy dvojklikom na .schx súbor).
+     */
+    public void showSchematicStage() {
+        schematicStage.show();
+        schematicStage.toFront();
     }
 
     //KONZOLA
