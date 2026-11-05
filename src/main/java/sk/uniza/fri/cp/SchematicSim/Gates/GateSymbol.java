@@ -201,12 +201,12 @@ public abstract class GateSymbol extends Item {
 
     /**
      * Skontroluje a aktualizuje aktuálnu hodnotu na vstupnom pine podľa potenciálu, ku ktorému je pripojený.
-     * Plávajúci vstup (High-Z) sa správa náhodne - náhoda je však stabilná, kým sa stav
-     * signálu nemení (generuje ju {@link Potential#getFloatingValue()}), takže vstup nebliká
-     * pri každom kroku simulácie.
+     * Plávajúci vstup (High-Z alebo úplne nezapojený) sa správa náhodne - náhoda je však stabilná,
+     * kým sa stav signálu nemení (generuje ju {@link Potential#getFloatingValue()}), takže vstup
+     * nebliká pri každom kroku simulácie.
      */
     public boolean isHigh(Pin inputPin) {
-        if (inputPin == null || !inputPin.isConnected()) return false;
+        if (inputPin == null) return false;
 
         Potential potential = inputPin.getPotential();
         Potential.Value value = potential != null ? potential.getValue() : Potential.Value.NC;
@@ -225,7 +225,7 @@ public abstract class GateSymbol extends Item {
     }
 
     public boolean isLow(Pin inputPin) {
-        if (inputPin == null || !inputPin.isConnected()) return false;
+        if (inputPin == null) return false;
 
         Potential potential = inputPin.getPotential();
         Potential.Value value = potential != null ? potential.getValue() : Potential.Value.NC;
