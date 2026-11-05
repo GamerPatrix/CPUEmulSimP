@@ -51,6 +51,16 @@ public class App extends Application {
     }
     public static Stage primStage;
 
+    /**
+     * Ukončenie celého procesu po zatvorení aplikácie. Platform.exit() zastaví iba JavaFX -
+     * akékoľvek iné bežiace vlákno, ktoré nie je daemon, by nechalo proces visieť v pamäti
+     * a jeho súbor .jar by sa nedal prepísať.
+     */
+    @Override
+    public void stop() {
+        System.exit(0);
+    }
+
     @Override
     public void start(Stage primaryStage) throws Exception {
         //nacitanie predvolenych farieb vodicov schémy

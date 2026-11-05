@@ -53,7 +53,6 @@ import sk.uniza.fri.cp.CPUEmul.Program;
 import sk.uniza.fri.cp.App.WireColorSettings;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 
-import javax.swing.*;
 import java.io.*;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -911,8 +910,7 @@ public class CPUController implements Initializable {
      */
     @FXML
     private void handleMenuAboutAction(){
-        JDialog f = new AboutDialog(new JFrame());
-        f.setVisible(true);
+        AboutDialog.show(btnStart.getScene().getWindow());
     }
 
     /**
