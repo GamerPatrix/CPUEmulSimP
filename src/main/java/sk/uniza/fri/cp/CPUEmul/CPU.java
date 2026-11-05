@@ -33,6 +33,10 @@ public class CPU extends Thread {
     private long ProgStart;
     private int NumOfInstr = 0;
 
+    //pocitadla pre test rychlosti - zapisuje iba vlakno CPU, citat mozno z ineho vlakna
+    private volatile long executedInstructions;
+    private volatile long executedBusInstructions;
+
     private final OutputStream console; //vystupny stream pre vypis znakov na terminal
     private Program program; //zavedeny program s instrukciami a konstantami programu
 
@@ -216,6 +220,7 @@ public class CPU extends Thread {
 //                    endInstExeTime = System.nanoTime();
                     // pocitanie instrukcii
                     NumOfInstr++;
+                    executedInstructions++;
 
                     //kontrola vyvolania prerusenia - najprv pockame, kym sa obvod ustali,
                     //aby sme neodchytili prechodny stav (napr. do casu, kym sa ustali IT)
@@ -507,6 +512,20 @@ public class CPU extends Thread {
 
     public Property<CPUStates> stateProperty(){
         return state;
+    }
+
+    /**
+     * Počet doteraz vykonaných inštrukcií (všetkých, aj tých pracujúcich so zbernicou).
+     */
+    public long getExecutedInstructions() {
+        return executedInstructions;
+    }
+
+    /**
+     * Počet doteraz dokončených inštrukcií pracujúcich so zbernicou (INN, OUT, LMI, LMR, SMI, SMR).
+     */
+    public long getExecutedBusInstructions() {
+        return executedBusInstructions;
     }
 
     /**
@@ -1075,6 +1094,7 @@ public class CPU extends Thread {
         microstepAwait("Zrusenie adresy");
         bus.setRandomAddress();
         InnEnd = System.nanoTime();
+        executedBusInstructions++;
     }
 
     /**
@@ -1135,6 +1155,7 @@ public class CPU extends Thread {
         //zrusenie adresy
         microstepAwait("Zrusenie adresy");
         bus.setRandomAddress();
+        executedBusInstructions++;
     }
 
     /**

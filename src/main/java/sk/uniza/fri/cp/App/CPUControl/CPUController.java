@@ -914,6 +914,25 @@ public class CPUController implements Initializable {
     }
 
     /**
+     * Test rýchlosti vykonávania programu a simulácie zapojenia.
+     */
+    @FXML
+    private void handleMenuSpeedTestAction(){
+        if(f_in_execution.getValue()){
+            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+            alert.setTitle("Test rýchlosti");
+            alert.setHeaderText(null);
+            alert.setContentText("Test nie je možné spustiť počas vykonávania programu. Najprv program zastavte.");
+            alert.showAndWait();
+            return;
+        }
+
+        SpeedTestDialog dialog = new SpeedTestDialog(btnStart.getScene().getWindow());
+        dialog.show();
+        SpeedTest.start(schematicSheet, dialog::showResult);
+    }
+
+    /**
      * Výstraha pre užívateľa s otázkou na ďalší postup, ak aktuálny súbor nie je uložený.
      *
      * @return true - volajúca procedúra môže pokračovať, false - užívateľ nechce pokračovať

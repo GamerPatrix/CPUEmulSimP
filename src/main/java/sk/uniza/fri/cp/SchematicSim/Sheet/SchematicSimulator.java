@@ -42,6 +42,8 @@ public class SchematicSimulator {
     private final ConcurrentHashMap<Pin, SheetEvent> latestEventForPin = new ConcurrentHashMap<>();
     private List<GateSymbol> allGates;
     private final BooleanProperty running;
+    /** Počet prepočtov súčiastok vyvolaných zmenou signálu - zapisuje iba simulačné vlákno. */
+    private volatile long gateSimulations;
 
     private final Service<Void> simulatorService = new Service<Void>() {
         @Override
@@ -164,6 +166,7 @@ if (steadyState) {
                                 for (SheetEvent e : wave) {
                                     if (!isSuperseded(e)) e.process(gatesToUpdate);
                                 }
+                                gateSimulations += gatesToUpdate.size();
                                 gatesToUpdate.forEach(GateSymbol::simulate);
                                 lastActivityTime = System.currentTimeMillis();
 
@@ -292,5 +295,13 @@ if (steadyState) {
 
     public BooleanProperty runningProperty() {
         return this.running;
+    }
+
+    /**
+     * Počet doteraz vykonaných prepočtov súčiastok vyvolaných zmenou signálu (bez pravidelného
+     * prepočtu počas nečinnosti).
+     */
+    public long getGateSimulations() {
+        return this.gateSimulations;
     }
 }
