@@ -90,6 +90,22 @@ public abstract class GateSymbol extends Item {
     public abstract void simulate();
 
     /**
+     * Či súčiastka potrebuje oznámenie o ustálení simulácie ({@link #steadyState()}).
+     * Simulátor si zoznam takých súčiastok zistí raz pri štarte.
+     */
+    public boolean needsSteadyState() {
+        return false;
+    }
+
+    /**
+     * Simulácia sa ustálila - front udalostí je prázdny, všetky zmeny z aktuálnej
+     * udalosti (napr. zápisu CPU) sa už rozšírili zapojením. Volá sa iba pre súčiastky,
+     * ktoré vrátia true z {@link #needsSteadyState()}.
+     */
+    public void steadyState() {
+    }
+
+    /**
      * Resetovanie výstupov (napr. pri zastavení simulácie).
      */
     public abstract void reset();

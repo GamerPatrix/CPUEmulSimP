@@ -86,6 +86,12 @@ public class SchematicSimulator {
                         // inak sa sukciastky vedia prepočítat v nahodnom poradi a na zbernici
                         // sa objavia prechodne (glitchove) stavy
                         LinkedHashSet<GateSymbol> gatesToUpdate = new LinkedHashSet<>();
+                        // súčiastky, ktoré chcú vedieť o ustálení (napr. 7-segment zobrazí
+                        // nové dáta až po ustálení, aby neukázal prechodný stav)
+                        List<GateSymbol> steadyGates = new ArrayList<>();
+                        for (GateSymbol gate : allGates) {
+                            if (gate.needsSteadyState()) steadyGates.add(gate);
+                        }
                         // jedna vlna (delta cyklus): vsetky udalosti, ktore su prave vo fronte.
                         // Hradla z vlny sa vyhodnotia RAZ; udalosti vytvorene simulaciou padnu
                         // do frontu az po odobrati vlny (drainTo) a tvoria vlnu nasledujucu.
@@ -109,6 +115,7 @@ public class SchematicSimulator {
                                         // ale niektoré súčiastky (napr. 7-segmentové hold-timeouty) potrebujú
                                         // periodické vyhodnotenie aj bez novej elektrickej udalosti.
                                         allGates.forEach(GateSymbol::simulate);
+                                        steadyGates.forEach(GateSymbol::steadyState);
                                         Bus.getBus().dataInSteadyState();
                                         steadyState = true;
                                         lastActivityTime = System.currentTimeMillis();
@@ -165,6 +172,7 @@ if (steadyState) {
                                 // prázdny front (queue.size()==0) aj idle, a nasledujúca udalosť
                                 // (ak príde) zneplatní idle cez simulationProcessingStarts().
                                 if (eventsQueue.isEmpty()) {
+                                    steadyGates.forEach(GateSymbol::steadyState);
                                     Bus.getBus().dataInSteadyState();
                                     steadyState = true;
                                 }

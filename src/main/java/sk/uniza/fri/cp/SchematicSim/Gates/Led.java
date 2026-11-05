@@ -43,7 +43,7 @@ public class Led extends GateSymbol {
 
     private static final int GRID_WIDTH = 2;
     private static final int GRID_HEIGHT = 2;
-    private static final long INPUT_HOLD_MS = 100L;
+    private static final long INPUT_HOLD_MS = 50L;
 
     /** Spoločné vlákno na zhasnutie LED po uplynutí minimálnej doby svietenia. */
     private static final ScheduledExecutorService HOLD_TIMER = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -251,8 +251,8 @@ public class Led extends GateSymbol {
 
     /**
      * Stavový automat svietenia. LED svieti počas HIGH a ešte minimálne {@code INPUT_HOLD_MS}
-     * od posledného prechodu LOW->HIGH. Ak už svieti aspoň 100 ms a vstup klesne na LOW,
-     * zhasne okamžite; krátky impulz zaručí svietenie na 100 ms.
+     * od posledného prechodu LOW->HIGH. Ak už svieti aspoň 50 ms a vstup klesne na LOW,
+     * zhasne okamžite; krátky impulz zaručí svietenie na 50 ms.
      */
     private void applyInputState(boolean high, long now) {
         if (high) {
