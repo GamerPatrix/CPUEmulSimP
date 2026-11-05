@@ -62,8 +62,9 @@ final class SpeedTestDialog {
         } else {
             root.getChildren().add(resultsGrid(result));
             Label note = new Label(result.gateCount > 0
-                    ? "Simulácia = prepočet jednej súčiastky po zmene signálu. Počas testu sa zapisovalo\n"
-                    + "na zbernicu, obsah RAM a registrov v zapojení sa mohol zmeniť."
+                    ? "Simulácia = prepočet všetkých súčiastok schémy po zmene jedného signálu (najhorší\n"
+                    + "prípad). Počas testu sa zapisovalo na zbernicu, obsah RAM a registrov v zapojení\n"
+                    + "sa mohol zmeniť."
                     : "I/O inštrukcie bežali bez zapojenia.");
             root.getChildren().add(note);
         }
@@ -81,7 +82,7 @@ final class SpeedTestDialog {
         addRow(grid, 0, "Inštrukcie bez zbernice:", perSecond(result.instructionsPerSecond, "inštrukcií/s"));
         addRow(grid, 1, "I/O inštrukcie (zbernica):", perSecond(result.busInstructionsPerSecond, "inštrukcií/s"));
         if (result.gateCount > 0) {
-            addRow(grid, 2, "Simulácia zapojenia (súčiastok: " + result.gateCount + "):",
+            addRow(grid, 2, "Simulácia celej schémy (súčiastok: " + result.gateCount + "):",
                     perSecond(result.simulationsPerSecond, "simulácií/s"));
         } else {
             addRow(grid, 2, "Simulácia zapojenia:", "žiadne zapojenie");

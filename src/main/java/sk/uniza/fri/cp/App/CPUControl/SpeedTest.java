@@ -9,6 +9,7 @@ import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
 import sk.uniza.fri.cp.SchematicSim.Gates.Input;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
+import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSimulator;
 
 import java.io.OutputStream;
 import java.util.ArrayList;
@@ -22,8 +23,9 @@ import java.util.function.ToLongFunction;
  * <p>
  * Inštrukcie vykonáva samostatná inštancia CPU so skutočnou zbernicou a so simuláciou aktuálneho
  * zapojenia, ako pri bežnom programe. Bez zapojenia beží simulácia prázdnej plochy.
- * Simulácia sa meria pri zmenách na zbernici a na výstupoch prepínačov, pričom samotný stav
- * prepínačov sa nemení. Zápisy CPU však môžu zmeniť obsah RAM a registrov v zapojení.
+ * Simulácia sa meria ako najhorší prípad - počet prepočtov celej schémy za sekundu, ak by jedna
+ * zmena signálu vyvolala prepočet všetkých súčiastok. Stav prepínačov sa nemení, zápisy CPU
+ * však môžu zmeniť obsah RAM a registrov v zapojení.
  */
 final class SpeedTest {
 
@@ -49,6 +51,7 @@ final class SpeedTest {
     private static final long WARMUP_MS = 100;
     private static final long SIMULATION_START_TIMEOUT_MS = 2000;
     private static final long STOP_TIMEOUT_MS = 1000;
+    private static final long SETTLE_TIMEOUT_MS = 200;
 
     private static final String NON_BUS_PROGRAM = "loop:\n"
             + " INC A\n ADD B,A\n MOV C,B\n XOR D,C\n ADI A,1\n CMP A,B\n PUS A\n POP C\n JMP loop\n";
@@ -128,8 +131,10 @@ final class SpeedTest {
     }
 
     /**
-     * Budenie zapojenia zmenami a meranie počtu prepočtov súčiastok. Riadiace signály zbernice
-     * ostávajú neaktívne a prepínače si držia svoj stav - po teste sa ich výstupy obnovia.
+     * Najhorší prípad: koľkokrát za sekundu je možné po zmene jedného signálu prepočítať všetky
+     * súčiastky schémy. Signálom je výstup ďalšieho prepínača, bez prepínačov bit dátovej zbernice.
+     * Riadiace signály zbernice ostávajú neaktívne a prepínače si držia svoj stav - po meraní
+     * sa ich výstupy obnovia.
      */
     private static long measureSimulation(SchematicSheet sheet, List<GateSymbol> gates, long phaseMs) throws Exception {
         List<Input> inputs = new ArrayList<>();
@@ -138,29 +143,38 @@ final class SpeedTest {
         }
 
         Bus bus = Bus.getBus();
-        Thread stimulus = new Thread(() -> {
-            int next = 0;
-            while (!Thread.currentThread().isInterrupted()) {
-                bus.setRandomAddress();
-                bus.setRandomData();
-                if (!inputs.isEmpty()) {
-                    Input input = inputs.get(next++ % inputs.size());
-                    Pin output = input.getPins().get(0);
-                    input.setPin(output, output.getState() == Pin.PinState.HIGH ? Pin.PinState.LOW : Pin.PinState.HIGH);
-                }
-                bus.waitForSteadyState();
+        int[] next = new int[1];
+        Runnable signalChange = () -> {
+            if (inputs.isEmpty()) {
+                bus.setDataBus((byte) (bus.getDataBus() ^ 1));
+            } else {
+                Input input = inputs.get(next[0]++ % inputs.size());
+                Pin output = input.getPins().get(0);
+                input.setPin(output, output.getState() == Pin.PinState.HIGH ? Pin.PinState.LOW : Pin.PinState.HIGH);
             }
-        }, "SpeedTestStimulus");
-        stimulus.setDaemon(true);
-        stimulus.start();
+        };
 
+        SchematicSimulator simulator = sheet.getSimulator();
+        simulator.startFullPassMeasurement(signalChange);
         try {
-            return measureRate(phaseMs, sheet.getSimulator()::getGateSimulations);
+            return measureRate(phaseMs, simulator::getFullPasses);
         } finally {
-            stimulus.interrupt();
-            stimulus.join(STOP_TIMEOUT_MS);
+            simulator.stopFullPassMeasurement();
             inputs.forEach(Input::simulate);
+            waitForSteadyState(bus);
         }
+    }
+
+    /**
+     * Doznenie udalostí po meraní, aby sa simulácia nevypínala s plným frontom. Zapojenie,
+     * ktoré sa nikdy neustáli, sa nečaká dlhšie ako {@link #SETTLE_TIMEOUT_MS}.
+     */
+    private static void waitForSteadyState(Bus bus) throws InterruptedException {
+        Thread waiter = new Thread(bus::waitForSteadyState, "SpeedTestSettle");
+        waiter.setDaemon(true);
+        waiter.start();
+        waiter.join(SETTLE_TIMEOUT_MS);
+        waiter.interrupt();
     }
 
     private static long measureRate(long phaseMs, LongSupplier counter) throws InterruptedException {
