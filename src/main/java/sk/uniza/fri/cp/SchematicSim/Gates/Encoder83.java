@@ -33,7 +33,7 @@ import java.util.List;
 public class Encoder83 extends GateSymbol {
 
     private static final String ICON_PATH = "/icons/koder.png";
-    private static final int GRID_WIDTH = 4;
+    private static final int GRID_WIDTH = 3;
     private static final int GRID_HEIGHT = 10;
 
     private Pin[] dataInputs;
@@ -125,7 +125,7 @@ public class Encoder83 extends GateSymbol {
         // EI nad prvým dátovým riadkom
         Text inputLabel = new Text("EI");
         inputLabel.setLayoutX(cell * 0.4);
-        inputLabel.setLayoutY(1 * cell + cell * 0.15);
+        inputLabel.setLayoutY(1 * cell + cell * 0.25);
         pane.getChildren().add(inputLabel);
 
         for (int index = 0; index < 8; index++) {
@@ -139,7 +139,7 @@ public class Encoder83 extends GateSymbol {
         String[] outputLabels = {"EO", "GS", "A0", "A1", "A2"};
         for (int index = 0; index < 5; index++) {
             Text pinLabel = new Text(outputLabels[index]);
-            pinLabel.setLayoutX(cell * 2.6);
+            pinLabel.setLayoutX(cell * 1.8);
             pinLabel.setLayoutY(outputRows[index] * cell + cell * 0.25);
             pane.getChildren().add(pinLabel);
         }

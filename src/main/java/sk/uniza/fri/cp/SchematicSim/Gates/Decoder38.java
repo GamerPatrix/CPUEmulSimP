@@ -29,7 +29,7 @@ import java.util.List;
 public class Decoder38 extends GateSymbol {
 
     private static final String ICON_PATH = "/icons/dekoder.png";
-    private static final int GRID_WIDTH = 4;
+    private static final int GRID_WIDTH = 3;
     private static final int GRID_HEIGHT = 9;
 
     private Pin[] outputs;
@@ -122,7 +122,7 @@ public class Decoder38 extends GateSymbol {
 
         for (int index = 0; index < 8; index++) {
             Text outputLabel = new Text("Y" + index);
-            outputLabel.setLayoutX(cell * 2.6);
+            outputLabel.setLayoutX(cell * 1.8);
             outputLabel.setLayoutY((index + 1) * cell + cell * 0.25);
             pane.getChildren().add(outputLabel);
         }
