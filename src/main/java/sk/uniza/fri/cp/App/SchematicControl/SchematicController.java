@@ -31,7 +31,9 @@ import sk.uniza.fri.cp.SchematicSim.Buses.DataBus8;
 import sk.uniza.fri.cp.SchematicSim.Gates.AndGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.BusBuffer;
 import sk.uniza.fri.cp.SchematicSim.Gates.Decoder38;
+import sk.uniza.fri.cp.SchematicSim.Gates.Demultiplexer;
 import sk.uniza.fri.cp.SchematicSim.Gates.Encoder83;
+import sk.uniza.fri.cp.SchematicSim.Gates.Multiplexer;
 import sk.uniza.fri.cp.SchematicSim.Gates.Led;
 import sk.uniza.fri.cp.SchematicSim.Gates.NandGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.NorGate;
@@ -207,6 +209,10 @@ public class SchematicController {
         //dekodér a kóder
         picker.registerItem(new Decoder38());
         picker.registerItem(new Encoder83());
+
+        //multiplexor a demultiplexor
+        picker.registerItem(new Multiplexer());
+        picker.registerItem(new Demultiplexer());
     }
 
     private ToolBar buildToolbar() {
