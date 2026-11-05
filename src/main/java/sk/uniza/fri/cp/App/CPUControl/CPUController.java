@@ -38,6 +38,7 @@ import org.fxmisc.flowless.VirtualizedScrollPane;
 import org.fxmisc.richtext.CodeArea;
 import org.fxmisc.richtext.InlineCssTextArea;
 import sk.uniza.fri.cp.App.AboutDialog;
+import sk.uniza.fri.cp.App.HelpWindow;
 import sk.uniza.fri.cp.App.CPUControl.CodeEditor.CodeEditorFactory;
 import sk.uniza.fri.cp.App.CPUControl.CodeEditor.RichTextFXHelpers;
 import sk.uniza.fri.cp.App.CPUControl.io.ConsoleOutputStream;
@@ -153,6 +154,7 @@ public class CPUController implements Initializable {
     private Stage schematicStage;
     private SchematicSheet schematicSheet;
     private SchematicController schematicController;
+    private HelpWindow helpWindow;
 
 	//registre
 	@FXML private TextField tfRegA;
@@ -911,6 +913,15 @@ public class CPUController implements Initializable {
     private void handleMenuAboutAction(){
         JDialog f = new AboutDialog(new JFrame());
         f.setVisible(true);
+    }
+
+    /**
+     * Okno so stručným popisom práce s programom.
+     */
+    @FXML
+    private void handleMenuHelpAction(){
+        if(helpWindow == null) helpWindow = new HelpWindow(btnStart.getScene().getWindow());
+        helpWindow.show();
     }
 
     /**
