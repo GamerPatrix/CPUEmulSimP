@@ -38,6 +38,7 @@ import org.fxmisc.flowless.VirtualizedScrollPane;
 import org.fxmisc.richtext.CodeArea;
 import org.fxmisc.richtext.InlineCssTextArea;
 import sk.uniza.fri.cp.App.AboutDialog;
+import sk.uniza.fri.cp.App.HelpWindow;
 import sk.uniza.fri.cp.App.CPUControl.CodeEditor.CodeEditorFactory;
 import sk.uniza.fri.cp.App.CPUControl.CodeEditor.RichTextFXHelpers;
 import sk.uniza.fri.cp.App.CPUControl.io.ConsoleOutputStream;
@@ -53,7 +54,6 @@ import sk.uniza.fri.cp.CPUEmul.Program;
 import sk.uniza.fri.cp.App.WireColorSettings;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 
-import javax.swing.*;
 import java.io.*;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -154,6 +154,7 @@ public class CPUController implements Initializable {
     private Stage schematicStage;
     private SchematicSheet schematicSheet;
     private SchematicController schematicController;
+    private HelpWindow helpWindow;
 
 	//registre
 	@FXML private TextField tfRegA;
@@ -863,26 +864,41 @@ public class CPUController implements Initializable {
 
         File file = chooser.showOpenDialog(btnLoadCode.getScene().getWindow());
 
-        if(file != null)
-            try (BufferedReader br = new BufferedReader(new InputStreamReader(
-                    new FileInputStream(file), StandardCharsets.UTF_8))) {
-                codeEditor.clear();
-                StringBuilder sb = new StringBuilder();
-                br.lines().forEach(line -> {
-                    sb.append(line + "\n");
-                });
-                codeEditor.appendText(sb.toString());
-                currentFile = file;
-                titPaneCode.setText("Kód - " + currentFile.getName());
-                fileSaved = true;
-                // nazov suboru do nazvu aplikacie
-                primStage.setTitle("CPU Emulator - " + currentFile.getName());
+        if(file != null) loadCodeFile(file);
+    }
 
-            } catch (FileNotFoundException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+    /**
+     * Otvorenie súboru s kódom zadaného zvonka (parameter príkazového riadku - dvojklik na .asm súbor).
+     * Ak beží program, zastaví sa; pri neuloženom kóde sa užívateľ opýta.
+     *
+     * @param file Súbor s kódom
+     */
+    public void openCodeFile(File file) {
+        if (isExecuting()) handleButtonStopAction();
+        if(!fileSaved && !continueIfUnsavedFile()) return;
+        loadCodeFile(file);
+    }
+
+    private void loadCodeFile(File file) {
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(
+                new FileInputStream(file), StandardCharsets.UTF_8))) {
+            codeEditor.clear();
+            StringBuilder sb = new StringBuilder();
+            br.lines().forEach(line -> {
+                sb.append(line + "\n");
+            });
+            codeEditor.appendText(sb.toString());
+            currentFile = file;
+            titPaneCode.setText("Kód - " + currentFile.getName());
+            fileSaved = true;
+            // nazov suboru do nazvu aplikacie
+            primStage.setTitle("CPU Emulator - " + currentFile.getName());
+
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     /**
@@ -915,8 +931,35 @@ public class CPUController implements Initializable {
      */
     @FXML
     private void handleMenuAboutAction(){
-        JDialog f = new AboutDialog(new JFrame());
-        f.setVisible(true);
+        AboutDialog.show(btnStart.getScene().getWindow());
+    }
+
+    /**
+     * Okno so stručným popisom práce s programom.
+     */
+    @FXML
+    private void handleMenuHelpAction(){
+        if(helpWindow == null) helpWindow = new HelpWindow(btnStart.getScene().getWindow());
+        helpWindow.show();
+    }
+
+    /**
+     * Test rýchlosti vykonávania programu a simulácie zapojenia.
+     */
+    @FXML
+    private void handleMenuSpeedTestAction(){
+        if(f_in_execution.getValue()){
+            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+            alert.setTitle("Test rýchlosti");
+            alert.setHeaderText(null);
+            alert.setContentText("Test nie je možné spustiť počas vykonávania programu. Najprv program zastavte.");
+            alert.showAndWait();
+            return;
+        }
+
+        SpeedTestDialog dialog = new SpeedTestDialog(btnStart.getScene().getWindow());
+        dialog.show();
+        SpeedTest.start(schematicSheet, dialog::showResult);
     }
 
     /**
@@ -1136,6 +1179,14 @@ public class CPUController implements Initializable {
         } else {
             schematicStage.show();
         }
+    }
+
+    /**
+     * Zobrazenie okna simulátora (napr. po otvorení schémy dvojklikom na .schx súbor).
+     */
+    public void showSchematicStage() {
+        schematicStage.show();
+        schematicStage.toFront();
     }
 
     //KONZOLA

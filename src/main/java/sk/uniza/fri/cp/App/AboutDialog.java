@@ -1,39 +1,24 @@
 package sk.uniza.fri.cp.App;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 
-import javax.swing.Box;
-import javax.swing.JButton;
-import javax.swing.JDialog;
-import javax.swing.JFrame;
-import javax.swing.JLabel;
-import javax.swing.JPanel;
+import javafx.scene.control.Alert;
+import javafx.stage.Window;
 
-public class AboutDialog extends JDialog {
-    public AboutDialog(JFrame parent) {
-        super(parent, "O programe", true);
+/**
+ * Okno s informáciami o programe.
+ */
+public final class AboutDialog {
 
-        Box b = Box.createVerticalBox();
-        b.add(Box.createGlue());
-        b.add(new JLabel("        CPU emulátor a logický simulátor"));
-        b.add(new JLabel("          Pôvodný autor: Tomáš Hianik"));
-        b.add(new JLabel("          (bakalárska práca v r.2017)"));
-        b.add(new JLabel("          Úpravy: Ondrej Karpiš a AI"));
-        b.add(Box.createGlue());
-        getContentPane().add(b, "Center");
+    private AboutDialog() {
+    }
 
-        JPanel p2 = new JPanel();
-        JButton ok = new JButton("Ok");
-        p2.add(ok);
-        getContentPane().add(p2, "South");
-
-        ok.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent evt) {
-                setVisible(false);
-            }
-        });
-
-        setSize(256, 150);
-        setLocation(400,300);
+    public static void show(Window owner) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.initOwner(owner);
+        alert.setTitle("O programe");
+        alert.setHeaderText("CPU emulátor a logický simulátor");
+        alert.setContentText("Pôvodný autor: Tomáš Hianik\n"
+                + "(bakalárska práca v r. 2017)\n"
+                + "Úpravy: Ondrej Karpiš a AI");
+        alert.showAndWait();
     }
 }

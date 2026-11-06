@@ -31,6 +31,9 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 7-segmentový displej. Má 9 vstupov - A až G (segmenty), DP (desatinná bodka) a
@@ -51,7 +54,14 @@ public class SevenSegmentDisplay extends GateSymbol {
     private static final int GRID_WIDTH = 6;
     private static final int GRID_HEIGHT = 10;
     private static final int SEGMENT_COUNT = 8;
-    private static final long CA_HOLD_MS = 100L;
+    private static final long CA_HOLD_MS = 50L;
+
+    /** Spoločné vlákno na zhasnutie displeja po uplynutí doby dosvietenia po deaktivácii CA. */
+    private static final ScheduledExecutorService HOLD_TIMER = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "7seg-hold");
+        t.setDaemon(true);
+        return t;
+    });
 
     private static final Color SEGMENT_OFF = Color.rgb(220, 220, 220);
     private static final Color SEGMENT_UNPOWERED = Color.rgb(120, 120, 120);
@@ -83,6 +93,13 @@ public class SevenSegmentDisplay extends GateSymbol {
     private boolean caHoldActive;
     private long caHoldDeadlineMs;
     private volatile boolean powered;
+    /**
+     * Stav segmentov prečítaný pri aktívnom CA, ktorý sa zobrazí až po ustálení simulácie.
+     * Ak sa CA deaktivuje ešte pred ustálením (dáta sa zmenili tesne pred vypnutím CA),
+     * zmena sa zahodí - pri multiplexe sa tak nový znak neukáže na predchádzajúcom displeji.
+     */
+    private boolean[] pendingLit = new boolean[SEGMENT_COUNT];
+    private boolean commitPending;
 
     /** Konštruktor pre paletku (ItemPicker). */
     public SevenSegmentDisplay() {
@@ -263,34 +280,42 @@ public class SevenSegmentDisplay extends GateSymbol {
     }
 
     @Override
-    public void simulate() {
+    public synchronized void simulate() {
         long now = System.currentTimeMillis();
         boolean caEnabled = isLow(caPin); // CA=LOW => displej aktivovaný
 
         if (caEnabled) {
-            // CA vrátené do aktívneho stavu: timeout sa zruší a displej pracuje normálne.
-            caWasEnabled = true;
-            caHoldActive = false;
-            caHoldDeadlineMs = 0L;
-            powered = true;
-
             boolean[] newLit = new boolean[SEGMENT_COUNT];
             for (int i = 0; i < SEGMENT_COUNT; i++) {
                 newLit[i] = isLow(segmentPins.get(i));
             }
+            pendingLit = newLit;
 
-            applyLitState(newLit, true);
+            if (!caWasEnabled) {
+                // CA aktivované: timeout dosvietenia sa zruší, displej zatiaľ ponechá
+                // doterajší obraz a nové dáta zobrazí až po ustálení simulácie
+                caWasEnabled = true;
+                caHoldActive = false;
+                caHoldDeadlineMs = 0L;
+                commitPending = true;
+            } else if (!powered || !Arrays.equals(newLit, litSegments)) {
+                commitPending = true;
+            }
             return;
         }
 
         // CA = HIGH = neaktívne. Triggerujeme hold iba na prechode 0->1.
         if (caWasEnabled) {
             caWasEnabled = false;
+            // neustálená zmena dát tesne pred deaktiváciou CA sa zahodí
+            commitPending = false;
             caHoldActive = true;
             caHoldDeadlineMs = now + CA_HOLD_MS;
             holdSnapshot = Arrays.copyOf(litSegments, SEGMENT_COUNT);
             powered = true;
             applyLitState(holdSnapshot, true);
+            // simulate() sa uz nemusi zavolat (vstupy sa nezmenia) - zhasnutie po uplynuti doby
+            HOLD_TIMER.schedule(this::holdExpired, CA_HOLD_MS, TimeUnit.MILLISECONDS);
             return;
         }
 
@@ -307,6 +332,34 @@ public class SevenSegmentDisplay extends GateSymbol {
         }
 
         // Po timeoute ostane displej vypnutý, kým sa CA nevráti na LOW.
+        powered = false;
+        applyLitState(new boolean[SEGMENT_COUNT], true);
+    }
+
+    @Override
+    public boolean needsSteadyState() {
+        return true;
+    }
+
+    /** Simulácia sa ustálila - ak je CA stále aktívne, zobrazia sa aktuálne dáta. */
+    @Override
+    public synchronized void steadyState() {
+        if (!commitPending) return;
+        commitPending = false;
+        if (!caWasEnabled) return;
+        powered = true;
+        applyLitState(pendingLit, true);
+    }
+
+    /** Uplynula doba dosvietenia - ak CA medzitým neaktivovali, displej zhasne. */
+    private synchronized void holdExpired() {
+        if (!caHoldActive) return;
+        long remaining = caHoldDeadlineMs - System.currentTimeMillis();
+        if (remaining > 0) {
+            HOLD_TIMER.schedule(this::holdExpired, remaining, TimeUnit.MILLISECONDS);
+            return;
+        }
+        caHoldActive = false;
         powered = false;
         applyLitState(new boolean[SEGMENT_COUNT], true);
     }
@@ -328,7 +381,7 @@ public class SevenSegmentDisplay extends GateSymbol {
     }
 
     @Override
-    public void reset() {
+    public synchronized void reset() {
         for (Pin pin : getPins()) {
             setPinForce(pin, Pin.PinState.NOT_CONNECTED);
         }
@@ -337,6 +390,8 @@ public class SevenSegmentDisplay extends GateSymbol {
         caWasEnabled = false;
         caHoldActive = false;
         caHoldDeadlineMs = 0L;
+        pendingLit = new boolean[SEGMENT_COUNT];
+        commitPending = false;
         powered = false;
         refreshVisual();
     }

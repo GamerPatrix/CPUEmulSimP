@@ -42,6 +42,10 @@ public class SchematicSimulator {
     private final ConcurrentHashMap<Pin, SheetEvent> latestEventForPin = new ConcurrentHashMap<>();
     private List<GateSymbol> allGates;
     private final BooleanProperty running;
+    /** Zmena signálu pre meranie plných prepočtov schémy; null = bežná simulácia. */
+    private volatile Runnable fullPassSignalChange;
+    /** Počet plných prepočtov schémy - zapisuje iba simulačné vlákno. */
+    private volatile long fullPasses;
 
     private final Service<Void> simulatorService = new Service<Void>() {
         @Override
@@ -86,6 +90,12 @@ public class SchematicSimulator {
                         // inak sa sukciastky vedia prepočítat v nahodnom poradi a na zbernici
                         // sa objavia prechodne (glitchove) stavy
                         LinkedHashSet<GateSymbol> gatesToUpdate = new LinkedHashSet<>();
+                        // súčiastky, ktoré chcú vedieť o ustálení (napr. 7-segment zobrazí
+                        // nové dáta až po ustálení, aby neukázal prechodný stav)
+                        List<GateSymbol> steadyGates = new ArrayList<>();
+                        for (GateSymbol gate : allGates) {
+                            if (gate.needsSteadyState()) steadyGates.add(gate);
+                        }
                         // jedna vlna (delta cyklus): vsetky udalosti, ktore su prave vo fronte.
                         // Hradla z vlny sa vyhodnotia RAZ; udalosti vytvorene simulaciou padnu
                         // do frontu az po odobrati vlny (drainTo) a tvoria vlnu nasledujucu.
@@ -100,6 +110,14 @@ public class SchematicSimulator {
                                 // počas čakania CPU na ustálenie naozaj bežala, alebo bola zablokovaná
                                 Bus.getBus().reportSimLoopActivity();
 
+                                Runnable fullPassChange = fullPassSignalChange;
+                                if (fullPassChange != null) {
+                                    runFullPass(fullPassChange, wave, gatesToUpdate);
+                                    steadyState = false;
+                                    lastActivityTime = System.currentTimeMillis();
+                                    continue;
+                                }
+
                                 event = eventsQueue.poll(IDLE_POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS);
                                 if (event == null) {
                                     if (eventsQueue.size() > 0) {
@@ -109,6 +127,7 @@ public class SchematicSimulator {
                                         // ale niektoré súčiastky (napr. 7-segmentové hold-timeouty) potrebujú
                                         // periodické vyhodnotenie aj bez novej elektrickej udalosti.
                                         allGates.forEach(GateSymbol::simulate);
+                                        steadyGates.forEach(GateSymbol::steadyState);
                                         Bus.getBus().dataInSteadyState();
                                         steadyState = true;
                                         lastActivityTime = System.currentTimeMillis();
@@ -165,6 +184,7 @@ if (steadyState) {
                                 // prázdny front (queue.size()==0) aj idle, a nasledujúca udalosť
                                 // (ak príde) zneplatní idle cez simulationProcessingStarts().
                                 if (eventsQueue.isEmpty()) {
+                                    steadyGates.forEach(GateSymbol::steadyState);
                                     Bus.getBus().dataInSteadyState();
                                     steadyState = true;
                                 }
@@ -284,5 +304,41 @@ if (steadyState) {
 
     public BooleanProperty runningProperty() {
         return this.running;
+    }
+
+    /**
+     * Začiatok merania najhoršieho prípadu: simulačné vlákno bez čakania opakuje zmenu signálu,
+     * šírenie čakajúcich udalostí a prepočet všetkých súčiastok schémy.
+     *
+     * @param signalChange Jedna zmena signálu, volá sa na simulačnom vlákne pred každým prepočtom.
+     */
+    public void startFullPassMeasurement(Runnable signalChange) {
+        this.fullPassSignalChange = signalChange;
+    }
+
+    public void stopFullPassMeasurement() {
+        this.fullPassSignalChange = null;
+    }
+
+    /**
+     * Počet doteraz dokončených plných prepočtov schémy.
+     */
+    public long getFullPasses() {
+        return this.fullPasses;
+    }
+
+    private void runFullPass(Runnable signalChange, List<SheetEvent> wave, LinkedHashSet<GateSymbol> gatesToUpdate) {
+        signalChange.run();
+
+        wave.clear();
+        eventsQueue.drainTo(wave);
+        gatesToUpdate.clear();
+        for (SheetEvent event : wave) {
+            if (!isSuperseded(event)) event.process(gatesToUpdate);
+        }
+        gatesToUpdate.clear();
+
+        allGates.forEach(GateSymbol::simulate);
+        fullPasses++;
     }
 }

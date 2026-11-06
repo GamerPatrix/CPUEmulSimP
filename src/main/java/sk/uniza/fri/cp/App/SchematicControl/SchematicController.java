@@ -32,7 +32,9 @@ import sk.uniza.fri.cp.SchematicSim.Buses.DataBus8;
 import sk.uniza.fri.cp.SchematicSim.Gates.AndGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.BusBuffer;
 import sk.uniza.fri.cp.SchematicSim.Gates.Decoder38;
+import sk.uniza.fri.cp.SchematicSim.Gates.Demultiplexer;
 import sk.uniza.fri.cp.SchematicSim.Gates.Encoder83;
+import sk.uniza.fri.cp.SchematicSim.Gates.Multiplexer;
 import sk.uniza.fri.cp.SchematicSim.Gates.Led;
 import sk.uniza.fri.cp.SchematicSim.Gates.NandGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.NorGate;
@@ -210,6 +212,10 @@ public class SchematicController {
         //dekodér a kóder
         picker.registerItem(new Decoder38());
         picker.registerItem(new Encoder83());
+
+        //multiplexor a demultiplexor
+        picker.registerItem(new Multiplexer());
+        picker.registerItem(new Demultiplexer());
     }
 
     private ToolBar buildToolbar() {
@@ -383,6 +389,16 @@ public class SchematicController {
                     this.btnF12reset.fire();
                     event.consume();
                     break;
+                case UP:
+                case DOWN:
+                case LEFT:
+                case RIGHT:
+                    // šípky pre CPU (scall key) ako v okne CPU - nemajú KEY_TYPED udalosť
+                    if (this.cpuController.isExecuting()) {
+                        this.cpuController.keyboardInput(event);
+                        event.consume();
+                    }
+                    break;
                 default:
                     break;
             }
@@ -436,6 +452,22 @@ public class SchematicController {
         File file = chooser.showOpenDialog(this.root.getScene().getWindow());
         if (file == null) return;
 
+        loadSchemeFile(file);
+    }
+
+    /**
+     * Otvorenie schémy zadanej zvonka (parameter príkazového riadku - dvojklik na .schx súbor).
+     * Pri neuloženej schéme sa užívateľ opýta.
+     *
+     * @param file Súbor so schémou
+     * @return true ak sa schéma načítala
+     */
+    public boolean openSchemeFile(File file) {
+        if (!continueIfUnsavedFile()) return false;
+        return loadSchemeFile(file);
+    }
+
+    private boolean loadSchemeFile(File file) {
         if (this.sheet.isSimulationRunning()) {
             this.sheet.powerOff();
         }
@@ -445,7 +477,9 @@ public class SchematicController {
             currentFile = file;
             sheet.clearChange();
             sheet.resetUndoHistory();
+            return true;
         }
+        return false;
     }
 
     /**
